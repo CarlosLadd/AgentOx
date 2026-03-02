@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/agentox-core", "crates/agentox-cli", "tests/mock_server", "mcp-test-servers/rust-sdk-server"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 rust-version = "1.75.0"
