@@ -7,8 +7,6 @@
 
 AgentOx is the open-source CLI tool for auditing [MCP (Model Context Protocol)](https://modelcontextprotocol.io) servers — checking protocol conformance, security surface, and behavioral contracts before any server ships to production.
 
-> *Think `trivy` for containers, but for AI agent infrastructure.*
-
 ---
 
 ## Installation
