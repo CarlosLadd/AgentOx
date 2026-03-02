@@ -2,7 +2,7 @@
 
 **MCP Security & Conformance Auditor — Forged in Rust**
 
-[![Crates.io](https://img.shields.io/crates/v/agentox.svg)](https://crates.io/crates/agentox-cli)
+[![Crates.io](https://img.shields.io/crates/v/agentox-cli.svg)](https://crates.io/crates/agentox-cli)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 AgentOx is the open-source CLI tool for auditing [MCP (Model Context Protocol)](https://modelcontextprotocol.io) servers — checking protocol conformance, security surface, and behavioral contracts before any server ships to production.
