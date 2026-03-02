@@ -416,7 +416,7 @@ jobs:
         uses: dtolnay/rust-action/setup@v1
 
       - name: Install AgentOx
-        run: cargo install agentox
+        run: cargo install agentox-cli
 
       - name: Audit MCP server
         run: |

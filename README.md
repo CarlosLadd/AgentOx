@@ -14,14 +14,14 @@ AgentOx is the open-source CLI tool for auditing [MCP (Model Context Protocol)](
 ## Installation
 
 ```sh
-cargo install agentox
+cargo install agentox-cli
 ```
 
 Or build from source:
 
 ```sh
-git clone https://github.com/agentox-rs/agentox
-cd agentox
+git clone https://github.com/CarlosLadd/AgentOx.git
+cd AgentOx
 cargo install --path crates/agentox-cli
 ```
 
@@ -94,7 +94,7 @@ AgentOx exits with code `1` when findings are detected and `0` when all checks p
 ```yaml
 - name: Audit MCP server
   run: |
-    cargo install agentox
+    cargo install agentox-cli
     agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" \
       --format json --no-color | tee audit-report.json
 
@@ -148,7 +148,7 @@ crates/
 
 ## Why Rust?
 
-- **Single binary** — `cargo install agentox`, zero runtime, runs in any CI pipeline
+- **Single binary** — `cargo install agentox-cli`, zero runtime, runs in any CI pipeline
 - **Memory safety** — auditing tools built in unsafe languages create irony
 - **Speed** — fuzz-test hundreds of variants per second; Python tools are too slow
 - **'Ox' brand** — Agent + Oxidize. The name and language are inseparable
