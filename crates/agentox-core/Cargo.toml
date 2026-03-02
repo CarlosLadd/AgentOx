@@ -6,7 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 description = "Core audit engine for AgentOx MCP security auditor"
-keywords = ["mcp", "audit", "security", "model-context-protocol", "jsonrpc"]
+keywords = ["mcp", "audit", "security", "conformance", "jsonrpc"]
 categories = ["development-tools", "web-programming"]
 
 [dependencies]

@@ -6,7 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 description = "CLI for AgentOx MCP security and conformance auditor"
-keywords = ["mcp", "audit", "security", "model-context-protocol"]
+keywords = ["mcp", "audit", "security", "conformance", "cli"]
 categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
