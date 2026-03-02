@@ -245,14 +245,14 @@ agentox audit [OPTIONS]
 
 Options:
   --stdio <COMMAND>      Server command for stdio transport
-  --target <URL>         Server HTTP/SSE endpoint URL (planned for v0.2)
+  --target <URL>         Server HTTP/SSE endpoint URL (reserved, not implemented yet)
   --format <FORMAT>      Output format: text (default) or json [default: text]
   --only <CATEGORY>      Run only specific check categories: conformance, security, behavioral
   --timeout <SECONDS>    Per-check timeout in seconds [default: 30]
   --no-color             Disable colored output
 ```
 
-You must provide exactly one of `--stdio` or `--target`.
+In v0.2, `--stdio` is required. `--target` is reserved for a future HTTP/SSE transport.
 
 ### Exit codes
 
@@ -499,7 +499,7 @@ agentox -v audit --stdio "your-server-command"
 
 ### "HTTP/SSE transport is not yet implemented"
 
-The `--target` flag for HTTP/SSE servers is planned for v0.2. For now, use `--stdio` with a command that spawns the server process.
+The `--target` flag for HTTP/SSE servers is still pending. For now, use `--stdio` with a command that spawns the server process.
 
 ### No colored output in my terminal
 
@@ -509,7 +509,7 @@ Some terminals or CI environments don't support ANSI colors. If colors look garb
 
 ## Conformance Checks Reference
 
-All 10 checks included in v0.1.0:
+All 10 conformance checks included in v0.2.0:
 
 | ID | Name | What it validates | Severity on Fail |
 |----|------|------------------|-----------------|
@@ -523,3 +523,14 @@ All 10 checks included in v0.1.0:
 | CONF-008 | Capability Negotiation | Declared capabilities match actual method support | MEDIUM |
 | CONF-009 | Protocol Version | Server handles version negotiation correctly | HIGH |
 | CONF-010 | Initialized Notification | Server handles `notifications/initialized` lifecycle correctly | LOW |
+
+## Security Checks Reference
+
+Initial security checks included in v0.2.0:
+
+| ID | Name | What it validates | Severity on Fail |
+|----|------|------------------|-----------------|
+| SEC-001 | Prompt-injection Echo Safety | Injection-like tool input is handled safely or rejected | HIGH |
+| SEC-002 | Tool Parameter Boundary Validation | `tools/call` malformed parameters are rejected with JSON-RPC errors | HIGH |
+| SEC-003 | Error Leakage Detection | Error bodies do not leak sensitive internals (paths, traces, secret-like tokens) | MEDIUM |
+| SEC-004 | Resource-exhaustion Guardrail | Server stays responsive under bounded burst + large-input probes | MEDIUM |

@@ -36,8 +36,8 @@ agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp"
 # Output structured JSON for CI pipelines
 agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" --format json
 
-# Audit an HTTP/SSE server (coming in v0.2)
-agentox audit --target http://localhost:8080
+# Run only security checks
+agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" --only security
 ```
 
 ---
@@ -60,15 +60,19 @@ Protocol: 2025-11-25
 [PASS] CONF-008 Capability negotiation
 [PASS] CONF-009 Protocol version validation
 [PASS] CONF-010 Initialized notification handling
+[PASS] SEC-001 Prompt-injection echo safety
+[PASS] SEC-002 Tool parameter boundary validation
+[PASS] SEC-003 Error leakage detection
+[PASS] SEC-004 Resource-exhaustion guardrail
 
 Summary
-  Total: 10, Passed: 10, Failed: 0
+  Total: 14, Passed: 14, Failed: 0
   Duration: 342ms
 ```
 
 ---
 
-## Conformance Checks (v0.1.0)
+## Conformance Checks (v0.2.0)
 
 | ID | Check | Severity on Fail |
 |----|-------|-----------------|
@@ -82,6 +86,15 @@ Summary
 | CONF-008 | Declared capabilities match supported methods | MEDIUM |
 | CONF-009 | Protocol version negotiation is handled correctly | HIGH |
 | CONF-010 | Initialization lifecycle is handled correctly | LOW |
+
+## Security Checks (v0.2.0)
+
+| ID | Check | Severity on Fail |
+|----|-------|-----------------|
+| SEC-001 | Prompt-injection style tool input is handled safely | HIGH |
+| SEC-002 | `tools/call` parameter boundary validation | HIGH |
+| SEC-003 | Error messages do not leak sensitive internals | MEDIUM |
+| SEC-004 | Bounded burst/large-input resilience | MEDIUM |
 
 ---
 
@@ -121,8 +134,8 @@ agentox audit --stdio "npx my-mcp-server" || {
 | Version | Focus | Status |
 |---------|-------|--------|
 | **v0.1** | Protocol Conformance (10 checks, stdio transport) | ✅ Done |
-| **v0.2** | Security Surface Analysis (prompt injection, SSRF, error leakage) | 🔨 Planned |
-| **v0.3** | CI/CD Integration (GitHub Action, Docker image, exit codes) | 📋 Planned |
+| **v0.2** | Security Surface Analysis (initial `SEC-*` suite, stdio transport) | ✅ Done |
+| **v0.3** | HTTP/SSE transport + CI/CD packaging (GitHub Action, Docker image) | 📋 Planned |
 | **v0.4** | Behavioral Contracts (idempotency, schema-output alignment) | 📋 Planned |
 | **v1.0** | Stable API, HTTP/SSE transport, HTML reports | 📋 Planned |
 

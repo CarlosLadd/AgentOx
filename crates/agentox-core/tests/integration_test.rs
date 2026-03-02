@@ -165,3 +165,47 @@ async fn test_unknown_method_returns_minus_32601() {
         error.code, error.message
     );
 }
+
+#[tokio::test]
+async fn test_security_checks_run_with_security_category() {
+    let mut ctx = setup_ctx(&[]).await;
+
+    let mut runner = CheckRunner::new();
+    runner.register_security_checks();
+
+    let results = runner.run_all(&mut ctx).await;
+    let _ = ctx.session.shutdown().await;
+
+    assert!(
+        !results.is_empty(),
+        "Expected at least one security check result"
+    );
+    assert!(
+        results.iter().all(|r| matches!(
+            r.category,
+            agentox_core::checks::types::CheckCategory::Security
+        )),
+        "All results should be in the security category"
+    );
+    assert!(
+        results.iter().all(|r| r.check_id.starts_with("SEC-")),
+        "All check IDs should use SEC-*"
+    );
+}
+
+#[tokio::test]
+async fn test_default_v0_2_runner_includes_conf_and_security() {
+    let mut ctx = setup_ctx(&[]).await;
+
+    let mut runner = CheckRunner::new();
+    runner.register_default_v0_2_checks();
+
+    let results = runner.run_all(&mut ctx).await;
+    let _ = ctx.session.shutdown().await;
+
+    let has_conf = results.iter().any(|r| r.check_id.starts_with("CONF-"));
+    let has_sec = results.iter().any(|r| r.check_id.starts_with("SEC-"));
+
+    assert!(has_conf, "Default v0.2 runner must include CONF-* checks");
+    assert!(has_sec, "Default v0.2 runner must include SEC-* checks");
+}

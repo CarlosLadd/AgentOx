@@ -4,6 +4,7 @@ use crate::checks::types::{CheckCategory, CheckResult};
 use crate::client::stdio::StdioTransport;
 use crate::client::McpSession;
 use crate::protocol::mcp_types::{InitializeResult, Tool};
+use std::time::Duration;
 
 /// Trait that all audit checks implement.
 #[async_trait::async_trait]
@@ -33,6 +34,8 @@ pub struct CheckContext {
     pub raw_init_response: Option<String>,
     /// Cached tools list.
     pub tools: Option<Vec<Tool>>,
+    /// Per-request transport timeout.
+    pub request_timeout: Duration,
 }
 
 impl CheckContext {
@@ -44,6 +47,7 @@ impl CheckContext {
             init_result: None,
             raw_init_response: None,
             tools: None,
+            request_timeout: Duration::from_secs(30),
         }
     }
 
@@ -51,9 +55,10 @@ impl CheckContext {
     /// The caller is responsible for shutting it down.
     /// Uses `spawn_quiet` to suppress server stderr noise.
     pub async fn disposable_session(&self) -> Result<McpSession, crate::error::SessionError> {
-        let transport = StdioTransport::spawn_quiet(&self.command)
+        let mut transport = StdioTransport::spawn_quiet(&self.command)
             .await
             .map_err(crate::error::SessionError::Transport)?;
+        transport.set_read_timeout(self.request_timeout);
         let mut session = McpSession::new(Box::new(transport));
         session.initialize().await?;
         Ok(session)
@@ -88,6 +93,24 @@ impl CheckRunner {
         self.register(Box::new(CapabilityNegotiation));
         self.register(Box::new(ProtocolVersionValidation));
         self.register(Box::new(InitializedNotificationOrder));
+    }
+
+    /// Register all default security checks.
+    pub fn register_security_checks(&mut self) {
+        use crate::checks::security::*;
+        self.register(Box::new(PromptInjectionEchoSafety));
+        self.register(Box::new(ToolParameterBoundaryValidation));
+        self.register(Box::new(ErrorLeakageDetection));
+        self.register(Box::new(ResourceExhaustionGuardrail));
+    }
+
+    /// Register behavioral checks (reserved for future versions).
+    pub fn register_behavioral_checks(&mut self) {}
+
+    /// Register default checks for v0.2 (conformance + security).
+    pub fn register_default_v0_2_checks(&mut self) {
+        self.register_conformance_checks();
+        self.register_security_checks();
     }
 
     /// Get the total number of registered checks.

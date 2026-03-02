@@ -25,6 +25,19 @@ struct Cli {
     verbose: bool,
 }
 
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum OutputFormat {
+    Text,
+    Json,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum CheckCategoryFilter {
+    Conformance,
+    Security,
+    Behavioral,
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Audit an MCP server for protocol conformance and security issues
@@ -40,11 +53,11 @@ enum Commands {
 
         /// Output format: text (default), json
         #[arg(long, default_value = "text", value_name = "FORMAT")]
-        format: String,
+        format: OutputFormat,
 
         /// Run only specific check categories: conformance, security, behavioral
         #[arg(long, value_name = "CATEGORY")]
-        only: Option<String>,
+        only: Option<CheckCategoryFilter>,
 
         /// Per-check timeout in seconds
         #[arg(long, default_value = "30", value_name = "SECONDS")]
@@ -75,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
             target,
             format,
             only,
-            timeout: _timeout,
+            timeout,
             no_color,
         } => {
             if stdio.is_none() && target.is_none() {
@@ -85,6 +98,10 @@ async fn main() -> anyhow::Result<()> {
                      agentox audit --stdio \"npx -y @modelcontextprotocol/server-filesystem /tmp\"\n  \
                      agentox audit --target http://localhost:8080"
                 );
+            }
+
+            if matches!(only, Some(CheckCategoryFilter::Behavioral)) {
+                anyhow::bail!("Behavioral checks are not implemented yet.");
             }
 
             if target.is_some() {
@@ -104,9 +121,11 @@ async fn main() -> anyhow::Result<()> {
             eprintln!();
 
             // --- Connect and initialize ---
-            let transport = StdioTransport::spawn(&command)
+            let mut transport = StdioTransport::spawn(&command)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to start server: {e}"))?;
+            let request_timeout = std::time::Duration::from_secs(timeout.max(1));
+            transport.set_read_timeout(request_timeout);
 
             let mut session = McpSession::new(Box::new(transport));
             let init_result = session
@@ -125,6 +144,7 @@ async fn main() -> anyhow::Result<()> {
             // --- Build check context ---
             let mut ctx = CheckContext::new(session, command.clone());
             ctx.init_result = Some(init_result.clone());
+            ctx.request_timeout = request_timeout;
 
             // Pre-fetch tools list so checks can share it
             match ctx.session.list_tools().await {
@@ -140,12 +160,11 @@ async fn main() -> anyhow::Result<()> {
 
             // --- Register checks ---
             let mut runner = CheckRunner::new();
-            match only.as_deref() {
-                Some("security") | Some("behavioral") => {
-                    eprintln!("Note: Only conformance checks are available in v0.1.0.");
-                    runner.register_conformance_checks();
-                }
-                _ => runner.register_conformance_checks(),
+            match only {
+                Some(CheckCategoryFilter::Conformance) => runner.register_conformance_checks(),
+                Some(CheckCategoryFilter::Security) => runner.register_security_checks(),
+                Some(CheckCategoryFilter::Behavioral) => unreachable!(),
+                None => runner.register_default_v0_2_checks(),
             }
 
             let total_checks = runner.check_count();
@@ -230,13 +249,13 @@ async fn main() -> anyhow::Result<()> {
             eprintln!();
 
             // --- Render output to stdout ---
-            match format.as_str() {
-                "json" => {
+            match format {
+                OutputFormat::Json => {
                     let json_out = json::render(&report)
                         .map_err(|e| anyhow::anyhow!("JSON serialization failed: {e}"))?;
                     println!("{json_out}");
                 }
-                _ => {
+                OutputFormat::Text => {
                     let text_out = text::render(&report);
                     println!("{text_out}");
                 }
