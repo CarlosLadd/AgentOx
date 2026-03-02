@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = ["crates/agentox-core", "crates/agentox-cli", "tests/mock_server"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.75.0"
+repository = "https://github.com/CarlosLadd/AgentOx"
+description = "Audit MCP servers for protocol conformance, security, and behavior"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+async-trait = "0.1"
+colored = "2"
+chrono = { version = "0.4", features = ["serde"] }

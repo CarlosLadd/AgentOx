@@ -1,0 +1,12 @@
+[package]
+name = "agentox-mock-server"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "mock-mcp-server"
+path = "main.rs"
+
+[dependencies]
+serde_json = "1"
