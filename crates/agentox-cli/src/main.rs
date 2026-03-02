@@ -4,6 +4,7 @@ use agentox_core::{
     report::{json, text, types::AuditReport},
 };
 use clap::{Parser, Subcommand};
+use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Instant;
 
@@ -97,8 +98,9 @@ async fn main() -> anyhow::Result<()> {
 
             let command = stdio.unwrap();
 
-            eprintln!("AgentOx v{}", env!("CARGO_PKG_VERSION"));
-            eprintln!("Target: {command}");
+            eprintln!("{}", "AgentOx".bold().cyan());
+            eprintln!("{} v{}", "Version".dimmed(), env!("CARGO_PKG_VERSION"));
+            eprintln!("{} {}", "Target".dimmed(), command);
             eprintln!();
 
             // --- Connect and initialize ---
@@ -113,10 +115,11 @@ async fn main() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!("MCP handshake failed: {e}"))?;
 
             eprintln!(
-                "Connected: {} v{}  (protocol {})",
-                init_result.server_info.name,
+                "{} {} v{}  (protocol {})",
+                "Server".dimmed(),
+                init_result.server_info.name.bold(),
                 init_result.server_info.version.as_deref().unwrap_or("?"),
-                init_result.protocol_version
+                init_result.protocol_version.dimmed()
             );
 
             // --- Build check context ---
@@ -126,7 +129,7 @@ async fn main() -> anyhow::Result<()> {
             // Pre-fetch tools list so checks can share it
             match ctx.session.list_tools().await {
                 Ok(tools) => {
-                    eprintln!("Tools found: {}", tools.len());
+                    eprintln!("{} {}", "Tools".dimmed(), tools.len());
                     ctx.tools = Some(tools);
                 }
                 Err(e) => {
@@ -151,18 +154,45 @@ async fn main() -> anyhow::Result<()> {
             let pb = ProgressBar::new(total_checks as u64);
             pb.set_style(
                 ProgressStyle::default_bar()
-                    .template("  {spinner:.cyan} [{bar:38.blue/dim}] {pos}/{len} {msg:.dim}")
+                    .template("  {spinner:.cyan} [{bar:30.blue/dim}] {pos}/{len}  {msg}")
                     .unwrap()
-                    .progress_chars("=> "),
+                    .progress_chars("━╸─"),
             );
             pb.enable_steady_tick(std::time::Duration::from_millis(80));
-            pb.set_message("running checks…");
 
             let audit_start = Instant::now();
-            let all_results = runner.run_all(&mut ctx).await;
+
+            // --- Run checks with live progress ---
+            let all_results = runner
+                .run_all_with_progress(&mut ctx, |check_id, check_name, results| {
+                    pb.inc(1);
+
+                    let all_passed = results.iter().all(|r| r.passed);
+                    let badge = if all_passed {
+                        "PASS".green().bold().to_string()
+                    } else {
+                        "FAIL".red().bold().to_string()
+                    };
+
+                    // Clear the progress bar line and print the result above it
+                    pb.suspend(|| {
+                        eprintln!("  [{badge}] {check_id} {check_name}");
+                    });
+
+                    // Update the progress message with the next check hint
+                    let completed = pb.position();
+                    if completed < total_checks as u64 {
+                        pb.set_message("running…".dimmed().to_string());
+                    } else {
+                        pb.set_message("done".green().to_string());
+                    }
+                })
+                .await;
+
             let duration_ms = audit_start.elapsed().as_millis() as u64;
 
             pb.finish_and_clear();
+            eprintln!();
 
             // --- Build report ---
             let protocol_version = ctx.session.protocol_version().map(|s| s.to_string());
@@ -179,7 +209,27 @@ async fn main() -> anyhow::Result<()> {
             // --- Shut down session ---
             let _ = ctx.session.shutdown().await;
 
-            // --- Render output ---
+            // --- Print summary to stderr ---
+            let passed_str = format!("{} passed", report.summary.passed).green();
+            let failed_str = if report.summary.failed > 0 {
+                format!("{} failed", report.summary.failed).red().bold()
+            } else {
+                format!("{} failed", report.summary.failed).green()
+            };
+            let duration_str = if duration_ms < 1000 {
+                format!("{duration_ms}ms")
+            } else {
+                format!("{:.1}s", duration_ms as f64 / 1000.0)
+            };
+            eprintln!(
+                "  {} {}, {} ({duration_str})",
+                "Summary".bold(),
+                passed_str,
+                failed_str,
+            );
+            eprintln!();
+
+            // --- Render output to stdout ---
             match format.as_str() {
                 "json" => {
                     let json_out = json::render(&report)

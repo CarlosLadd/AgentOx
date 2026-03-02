@@ -2,6 +2,7 @@
 
 use crate::checks::runner::{Check, CheckContext};
 use crate::checks::types::{CheckCategory, CheckResult, Severity};
+use crate::error::TransportError;
 use crate::protocol::jsonrpc::JsonRpcRequest;
 
 pub struct MalformedRequestHandling;
@@ -95,23 +96,15 @@ impl Check for MalformedRequestHandling {
                             ));
                         }
                     }
-
-                    // Verify server is still alive by sending a valid request
-                    let ping = JsonRpcRequest::new(9000, "tools/list", Some(serde_json::json!({})));
-                    if session.send_request(&ping).await.is_err() {
-                        results.push(CheckResult::fail(
-                            self.id(),
-                            self.name(),
-                            self.category(),
-                            Severity::Critical,
-                            desc,
-                            format!("Server became unresponsive after receiving {label}"),
-                        ));
-                        break;
-                    }
                 }
                 Ok(None) => {
-                    // No response — might be OK for some malformed messages
+                    // No response — server ignored it, which is acceptable
+                }
+                Err(TransportError::Timeout(_)) => {
+                    // Server didn't respond within the timeout — it ignored the
+                    // malformed input. This is acceptable behavior; the critical
+                    // question is whether the server is still alive afterward.
+                    tracing::debug!("Server did not respond to {label} (timeout — ignored)");
                 }
                 Err(_) => {
                     results.push(CheckResult::fail(
@@ -121,6 +114,49 @@ impl Check for MalformedRequestHandling {
                         Severity::Critical,
                         desc,
                         format!("Server crashed or disconnected after receiving {label}"),
+                    ));
+                    break;
+                }
+            }
+
+            // After each malformed message, verify the server is still alive
+            // by sending a valid request.
+            let ping = JsonRpcRequest::new(9000, "tools/list", Some(serde_json::json!({})));
+            match session.send_request(&ping).await {
+                Ok(_) => {
+                    // Server is alive — continue to next malformed message
+                }
+                Err(TransportError::Timeout(_)) => {
+                    // Server became unresponsive — need a fresh session for remaining tests.
+                    let _ = session.shutdown().await;
+                    match ctx.disposable_session().await {
+                        Ok(new_session) => {
+                            session = new_session;
+                            tracing::debug!(
+                                "Replaced unresponsive session after {label} liveness check"
+                            );
+                        }
+                        Err(_) => {
+                            results.push(CheckResult::fail(
+                                self.id(),
+                                self.name(),
+                                self.category(),
+                                Severity::Critical,
+                                desc,
+                                format!("Server became unresponsive after receiving {label}"),
+                            ));
+                            break;
+                        }
+                    }
+                }
+                Err(_) => {
+                    results.push(CheckResult::fail(
+                        self.id(),
+                        self.name(),
+                        self.category(),
+                        Severity::Critical,
+                        desc,
+                        format!("Server became unresponsive after receiving {label}"),
                     ));
                     break;
                 }

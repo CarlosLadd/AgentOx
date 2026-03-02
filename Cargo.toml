@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/agentox-core", "crates/agentox-cli", "tests/mock_server"]
+members = ["crates/agentox-core", "crates/agentox-cli", "tests/mock_server", "mcp-test-servers/rust-sdk-server"]
 
 [workspace.package]
 version = "0.1.0"

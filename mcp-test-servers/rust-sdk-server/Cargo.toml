@@ -1,0 +1,17 @@
+[package]
+name = "mcp-test-server-rust"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Minimal MCP test server using the official Rust SDK (rmcp) for AgentOx audit targets"
+
+[[bin]]
+name = "mcp-test-server-rust"
+path = "src/main.rs"
+
+[dependencies]
+rmcp = { version = "0.17", features = ["server", "transport-io", "macros"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+schemars = "0.8"
+anyhow = "1"

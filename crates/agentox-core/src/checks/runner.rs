@@ -49,8 +49,9 @@ impl CheckContext {
 
     /// Spawn a fresh disposable session for destructive tests.
     /// The caller is responsible for shutting it down.
+    /// Uses `spawn_quiet` to suppress server stderr noise.
     pub async fn disposable_session(&self) -> Result<McpSession, crate::error::SessionError> {
-        let transport = StdioTransport::spawn(&self.command)
+        let transport = StdioTransport::spawn_quiet(&self.command)
             .await
             .map_err(crate::error::SessionError::Transport)?;
         let mut session = McpSession::new(Box::new(transport));
@@ -96,6 +97,23 @@ impl CheckRunner {
 
     /// Run all registered checks and return all results.
     pub async fn run_all(&self, ctx: &mut CheckContext) -> Vec<CheckResult> {
+        self.run_all_with_progress(ctx, |_, _, _| {}).await
+    }
+
+    /// Run all registered checks with a progress callback.
+    ///
+    /// The callback is invoked after each check completes with:
+    /// - `check_id`: the ID of the check that just finished (e.g., "CONF-001")
+    /// - `check_name`: the human-readable name
+    /// - `results`: the results produced by this check
+    pub async fn run_all_with_progress<F>(
+        &self,
+        ctx: &mut CheckContext,
+        mut on_check_done: F,
+    ) -> Vec<CheckResult>
+    where
+        F: FnMut(&str, &str, &[CheckResult]),
+    {
         let mut results = Vec::new();
         for check in &self.checks {
             tracing::info!(check_id = %check.id(), name = %check.name(), "running check");
@@ -105,6 +123,7 @@ impl CheckRunner {
             for r in &mut check_results {
                 r.duration_ms = elapsed;
             }
+            on_check_done(check.id(), check.name(), &check_results);
             results.extend(check_results);
         }
         results

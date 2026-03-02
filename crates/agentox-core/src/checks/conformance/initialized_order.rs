@@ -28,7 +28,7 @@ impl Check for InitializedNotificationOrder {
         let mut results = Vec::new();
 
         // Spawn a fresh session without going through the normal handshake
-        let transport = match StdioTransport::spawn(&ctx.command).await {
+        let transport = match StdioTransport::spawn_quiet(&ctx.command).await {
             Ok(t) => t,
             Err(e) => {
                 return vec![CheckResult::fail(

@@ -5,6 +5,9 @@ use crate::error::TransportError;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::process::{Child, ChildStdin, ChildStdout};
 
+/// Default read timeout for waiting on server responses.
+const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// MCP transport over stdio — spawns a subprocess and pipes JSON-RPC messages.
 pub struct StdioTransport {
     child: Child,
@@ -13,14 +16,30 @@ pub struct StdioTransport {
     stdout: BufReader<ChildStdout>,
     /// The original command string, stored for reconnection.
     command: String,
+    /// Maximum time to wait for a response line from the server.
+    read_timeout: std::time::Duration,
 }
 
 impl StdioTransport {
     /// Spawn a child process from a shell command string.
     ///
     /// The command is split using shell word-splitting rules (handles quotes).
-    /// stdin and stdout are piped for JSON-RPC communication; stderr is inherited.
+    /// stdin and stdout are piped for JSON-RPC communication; stderr is inherited
+    /// so the user can see server logs.
     pub async fn spawn(command: &str) -> Result<Self, TransportError> {
+        Self::spawn_inner(command, false).await
+    }
+
+    /// Spawn a child process with stderr suppressed.
+    ///
+    /// Used for disposable sessions where server startup messages would clutter
+    /// the terminal output.
+    pub async fn spawn_quiet(command: &str) -> Result<Self, TransportError> {
+        Self::spawn_inner(command, true).await
+    }
+
+    /// Internal spawn implementation.
+    async fn spawn_inner(command: &str, quiet: bool) -> Result<Self, TransportError> {
         let words =
             shell_words::split(command).map_err(|e| TransportError::CommandParse(e.to_string()))?;
 
@@ -31,13 +50,19 @@ impl StdioTransport {
         let program = &words[0];
         let args = &words[1..];
 
-        tracing::debug!(program = %program, args = ?args, "spawning MCP server process");
+        tracing::debug!(program = %program, args = ?args, quiet, "spawning MCP server process");
+
+        let stderr_cfg = if quiet {
+            std::process::Stdio::null()
+        } else {
+            std::process::Stdio::inherit()
+        };
 
         let mut child = tokio::process::Command::new(program)
             .args(args)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::inherit())
+            .stderr(stderr_cfg)
             .spawn()
             .map_err(TransportError::Io)?;
 
@@ -55,7 +80,13 @@ impl StdioTransport {
             stdin: Some(BufWriter::new(stdin)),
             stdout: BufReader::new(stdout),
             command: command.to_string(),
+            read_timeout: DEFAULT_READ_TIMEOUT,
         })
+    }
+
+    /// Set the read timeout for this transport.
+    pub fn set_read_timeout(&mut self, timeout: std::time::Duration) {
+        self.read_timeout = timeout;
     }
 
     /// Get the original command string (for reconnection).
@@ -80,27 +111,34 @@ impl StdioTransport {
         Ok(())
     }
 
-    /// Internal helper — read one line from the child's stdout.
+    /// Internal helper — read one line from the child's stdout, with timeout.
     async fn read_line(&mut self) -> Result<Option<String>, TransportError> {
-        let mut line = String::new();
-        let bytes_read = self
-            .stdout
-            .read_line(&mut line)
-            .await
-            .map_err(TransportError::Io)?;
+        let read_future = async {
+            let mut line = String::new();
+            let bytes_read = self
+                .stdout
+                .read_line(&mut line)
+                .await
+                .map_err(TransportError::Io)?;
 
-        if bytes_read == 0 {
-            return Err(TransportError::ProcessExit(
-                "server closed stdout".to_string(),
-            ));
+            if bytes_read == 0 {
+                return Err(TransportError::ProcessExit(
+                    "server closed stdout".to_string(),
+                ));
+            }
+
+            let trimmed = line.trim().to_string();
+            if trimmed.is_empty() {
+                return Ok(None);
+            }
+
+            Ok(Some(trimmed))
+        };
+
+        match tokio::time::timeout(self.read_timeout, read_future).await {
+            Ok(result) => result,
+            Err(_) => Err(TransportError::Timeout(self.read_timeout)),
         }
-
-        let trimmed = line.trim().to_string();
-        if trimmed.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(trimmed))
     }
 }
 
