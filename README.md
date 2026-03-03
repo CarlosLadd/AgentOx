@@ -36,6 +36,9 @@ agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" --fo
 
 # Run only security checks
 agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" --only security
+
+# Audit an HTTP/SSE endpoint (beta)
+agentox audit --target "http://localhost:8080"
 ```
 
 ---
@@ -64,13 +67,13 @@ Protocol: 2025-11-25
 [PASS] SEC-004 Resource-exhaustion guardrail
 
 Summary
-  Total: 14, Passed: 14, Failed: 0
+  Total: 17, Passed: 17, Failed: 0
   Duration: 342ms
 ```
 
 ---
 
-## Conformance Checks (v0.3.0)
+## Conformance Checks (v0.4.0)
 
 | ID | Check | Severity on Fail |
 |----|-------|-----------------|
@@ -85,7 +88,7 @@ Summary
 | CONF-009 | Protocol version negotiation is handled correctly | HIGH |
 | CONF-010 | Initialization lifecycle is handled correctly | LOW |
 
-## Security Checks (v0.3.0)
+## Security Checks (v0.4.0)
 
 | ID | Check | Severity on Fail |
 |----|-------|-----------------|
@@ -93,6 +96,14 @@ Summary
 | SEC-002 | `tools/call` parameter boundary validation | HIGH |
 | SEC-003 | Error messages do not leak sensitive internals | MEDIUM |
 | SEC-004 | Bounded burst/large-input resilience | MEDIUM |
+
+## Behavioral Checks (v0.4.0)
+
+| ID | Check | Severity on Fail |
+|----|-------|-----------------|
+| BHV-001 | tools/list idempotency baseline | MEDIUM |
+| BHV-002 | Declared outputSchema vs actual tools/call output | HIGH |
+| BHV-003 | Deterministic malformed-request error semantics | MEDIUM |
 
 ---
 
@@ -133,8 +144,8 @@ agentox audit --stdio "npx my-mcp-server" || {
 |---------|-------|--------|
 | **v0.1** | Protocol Conformance (10 checks, stdio transport) | ✅ Done |
 | **v0.2** | Security Surface Analysis (initial `SEC-*` suite, stdio transport) | ✅ Done |
-| **v0.3** | HTTP/SSE transport + CI/CD packaging (GitHub Action, Docker image) | 📋 Planned |
-| **v0.4** | Behavioral Contracts (idempotency, schema-output alignment) | 📋 Planned |
+| **v0.3** | HTTP/SSE transport + CI/CD packaging (GitHub Action, Docker image) | ✅ Done |
+| **v0.4** | Behavioral Contracts + HTTP/SSE beta transport | ✅ Done |
 | **v1.0** | Stable API, HTTP/SSE transport, HTML reports | 📋 Planned |
 
 ---

@@ -43,9 +43,10 @@ agentox audit --stdio "./target/debug/mcp-test-server-rust" --only security
 
 ### Expected Results
 
-For AgentOx `v0.2`, expected baseline is **13/14**:
+For AgentOx `v0.4`, expected baseline is **16/17**:
 - `CONF-001..004`, `CONF-006..010` pass
 - `SEC-001..004` pass
+- `BHV-001..003` pass
 - `CONF-005` fails
 
 `CONF-005` (malformed request handling) fails because the rmcp SDK disconnects on truncated JSON instead of returning a JSON-RPC parse error (`-32700`). This is a known SDK limitation, not a server business-logic bug.
@@ -65,6 +66,9 @@ For AgentOx `v0.2`, expected baseline is **13/14**:
   [PASS] SEC-002 Tool parameter boundary validation
   [PASS] SEC-003 Error leakage detection
   [PASS] SEC-004 Resource-exhaustion guardrail
+  [PASS] BHV-001 Idempotency baseline
+  [PASS] BHV-002 Schema-output alignment
+  [PASS] BHV-003 Deterministic error semantics
 ```
 
 ### Expected Failure Policy

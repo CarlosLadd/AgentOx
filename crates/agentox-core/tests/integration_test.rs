@@ -7,7 +7,7 @@
 //! `cargo build --workspace` at least once before running these tests.
 
 use agentox_core::{
-    checks::runner::{CheckContext, CheckRunner},
+    checks::runner::{CheckContext, CheckRunner, ConnectionTarget},
     client::{session::McpSession, stdio::StdioTransport},
     report::types::AuditReport,
 };
@@ -61,7 +61,12 @@ async fn setup_ctx(env_overrides: &[(&str, &str)]) -> CheckContext {
         .await
         .expect("failed to initialize MCP session");
 
-    let mut ctx = CheckContext::new(session, shell_cmd);
+    let mut ctx = CheckContext::new(
+        session,
+        ConnectionTarget::Stdio {
+            command: shell_cmd.clone(),
+        },
+    );
     ctx.init_result = Some(init_result);
 
     let tools = ctx.session.list_tools().await.unwrap_or_default();
@@ -81,7 +86,12 @@ async fn setup_ctx_from_command(shell_cmd: String) -> CheckContext {
         .await
         .expect("failed to initialize MCP session");
 
-    let mut ctx = CheckContext::new(session, shell_cmd);
+    let mut ctx = CheckContext::new(
+        session,
+        ConnectionTarget::Stdio {
+            command: shell_cmd.clone(),
+        },
+    );
     ctx.init_result = Some(init_result);
 
     let tools = ctx.session.list_tools().await.unwrap_or_default();
@@ -225,11 +235,11 @@ async fn test_security_checks_run_with_security_category() {
 }
 
 #[tokio::test]
-async fn test_default_v0_2_runner_includes_conf_and_security() {
+async fn test_default_v0_4_runner_includes_all_categories() {
     let mut ctx = setup_ctx(&[]).await;
 
     let mut runner = CheckRunner::new();
-    runner.register_default_v0_2_checks();
+    runner.register_default_v0_4_checks();
 
     let results = runner.run_all(&mut ctx).await;
     let _ = ctx.session.shutdown().await;
@@ -237,22 +247,24 @@ async fn test_default_v0_2_runner_includes_conf_and_security() {
     let has_conf = results.iter().any(|r| r.check_id.starts_with("CONF-"));
     let has_sec = results.iter().any(|r| r.check_id.starts_with("SEC-"));
 
-    assert!(has_conf, "Default v0.2 runner must include CONF-* checks");
-    assert!(has_sec, "Default v0.2 runner must include SEC-* checks");
+    let has_bhv = results.iter().any(|r| r.check_id.starts_with("BHV-"));
+    assert!(has_conf, "Default v0.4 runner must include CONF-* checks");
+    assert!(has_sec, "Default v0.4 runner must include SEC-* checks");
+    assert!(has_bhv, "Default v0.4 runner must include BHV-* checks");
 }
 
 #[tokio::test]
-async fn test_default_v0_2_json_report_has_expected_shape_and_counts() {
+async fn test_default_v0_4_json_report_has_expected_shape_and_counts() {
     let mut ctx = setup_ctx(&[]).await;
     let mut runner = CheckRunner::new();
-    runner.register_default_v0_2_checks();
+    runner.register_default_v0_4_checks();
 
     let results = runner.run_all(&mut ctx).await;
     let _ = ctx.session.shutdown().await;
     let report = AuditReport::from_results(results, "mock-server".to_string(), None, None, 100);
 
-    assert_eq!(report.summary.total_checks, 14);
-    assert_eq!(report.summary.passed + report.summary.failed, 14);
+    assert_eq!(report.summary.total_checks, 17);
+    assert_eq!(report.summary.passed + report.summary.failed, 17);
     let by_sev_total: usize = report.summary.by_severity.values().sum();
     assert_eq!(by_sev_total, report.summary.failed);
 
@@ -263,6 +275,7 @@ async fn test_default_v0_2_json_report_has_expected_shape_and_counts() {
         .collect();
     assert!(categories.contains("\"conformance\""));
     assert!(categories.contains("\"security\""));
+    assert!(categories.contains("\"behavioral\""));
 }
 
 #[tokio::test]
@@ -280,7 +293,7 @@ async fn test_rust_sdk_server_expected_profile_conf_005_only() {
 
     let mut ctx = setup_ctx_from_command(rust_sdk_server_bin()).await;
     let mut runner = CheckRunner::new();
-    runner.register_default_v0_2_checks();
+    runner.register_default_v0_4_checks();
     let results = runner.run_all(&mut ctx).await;
     let _ = ctx.session.shutdown().await;
 

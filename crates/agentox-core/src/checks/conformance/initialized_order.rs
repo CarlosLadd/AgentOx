@@ -2,8 +2,6 @@
 
 use crate::checks::runner::{Check, CheckContext};
 use crate::checks::types::{CheckCategory, CheckResult, Severity};
-use crate::client::stdio::StdioTransport;
-use crate::client::McpSession;
 use crate::protocol::jsonrpc::JsonRpcRequest;
 use crate::protocol::mcp_types::{ClientCapabilities, Implementation, InitializeParams};
 
@@ -27,9 +25,9 @@ impl Check for InitializedNotificationOrder {
         let desc = "Server should handle the initialized notification and the initialization lifecycle correctly";
         let mut results = Vec::new();
 
-        // Spawn a fresh session without going through the normal handshake
-        let transport = match StdioTransport::spawn_quiet(&ctx.command).await {
-            Ok(t) => t,
+        // Spawn a fresh session without going through the normal handshake.
+        let mut session = match ctx.fresh_session().await {
+            Ok(s) => s,
             Err(e) => {
                 return vec![CheckResult::fail(
                     self.id(),
@@ -41,8 +39,6 @@ impl Check for InitializedNotificationOrder {
                 )];
             }
         };
-
-        let mut session = McpSession::new(Box::new(transport));
 
         // Step 1: Send initialize (without sending initialized notification yet)
         let params = InitializeParams {

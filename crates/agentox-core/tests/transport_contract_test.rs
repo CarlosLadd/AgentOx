@@ -1,6 +1,13 @@
+use agentox_core::client::http_sse::HttpSseTransport;
 use agentox_core::client::transport::{Transport, TransportCapabilities};
 use agentox_core::error::TransportError;
 use agentox_core::protocol::jsonrpc::{JsonRpcNotification, JsonRpcRequest};
+use std::{
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    thread,
+    time::Duration,
+};
 
 struct FakeTransport {
     next_response: Option<String>,
@@ -87,4 +94,70 @@ async fn test_transport_capabilities_contract() {
     let caps = tx.capabilities();
     assert!(caps.request_response);
     assert!(!caps.streaming_notifications);
+}
+
+fn read_http_request(stream: &mut TcpStream) -> Option<String> {
+    let mut buf = vec![0_u8; 4096];
+    let n = stream.read(&mut buf).ok()?;
+    if n == 0 {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&buf[..n]).to_string())
+}
+
+fn write_http_response(stream: &mut TcpStream, content_type: &str, body: &str) {
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let _ = stream.write_all(response.as_bytes());
+    let _ = stream.flush();
+}
+
+fn start_one_shot_server(body: String, content_type: &'static str) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind one-shot http server");
+    let addr = listener.local_addr().expect("local addr");
+    thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let _ = read_http_request(&mut stream);
+            write_http_response(&mut stream, content_type, &body);
+        }
+    });
+    format!("http://{}", addr)
+}
+
+#[tokio::test]
+async fn test_http_sse_transport_json_response_contract() {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {"ok": true}
+    })
+    .to_string();
+    let endpoint = start_one_shot_server(body, "application/json");
+    let mut tx = HttpSseTransport::new(endpoint, Duration::from_secs(5));
+    let resp = tx
+        .request_raw("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}")
+        .await
+        .expect("http transport should return response");
+    assert!(resp.is_some());
+}
+
+#[tokio::test]
+async fn test_http_sse_transport_sse_response_contract() {
+    let payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {"ok": true}
+    })
+    .to_string();
+    let body = format!("event: message\ndata: {payload}\n\n");
+    let endpoint = start_one_shot_server(body, "text/event-stream");
+    let mut tx = HttpSseTransport::new(endpoint, Duration::from_secs(5));
+    let resp = tx
+        .request_raw("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}")
+        .await
+        .expect("http sse transport should parse first data event");
+    assert_eq!(resp.unwrap_or_default(), payload);
 }

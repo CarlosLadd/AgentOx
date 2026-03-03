@@ -1,6 +1,6 @@
 use agentox_core::{
-    checks::runner::{CheckContext, CheckRunner},
-    client::{session::McpSession, stdio::StdioTransport},
+    checks::runner::{CheckContext, CheckRunner, ConnectionTarget},
+    client::{session::McpSession, HttpSseTransport, StdioTransport},
     report::{json, text, types::AuditReport},
 };
 use clap::{Parser, Subcommand};
@@ -93,19 +93,15 @@ async fn main() -> anyhow::Result<()> {
         } => {
             if stdio.is_none() && target.is_none() {
                 anyhow::bail!(
-                    "Either --stdio or --target must be specified.\n\n\
+                    "Exactly one of --stdio or --target must be specified.\n\n\
                      Examples:\n  \
                      agentox audit --stdio \"npx -y @modelcontextprotocol/server-filesystem /tmp\"\n  \
                      agentox audit --target http://localhost:8080"
                 );
             }
 
-            if matches!(only, Some(CheckCategoryFilter::Behavioral)) {
-                anyhow::bail!("Behavioral checks are not implemented yet.");
-            }
-
-            if target.is_some() {
-                anyhow::bail!("HTTP/SSE transport is not yet implemented. Use --stdio for now.");
+            if stdio.is_some() && target.is_some() {
+                anyhow::bail!("Use either --stdio or --target, but not both.");
             }
 
             // Respect --no-color and the NO_COLOR env var
@@ -113,21 +109,36 @@ async fn main() -> anyhow::Result<()> {
                 colored::control::set_override(false);
             }
 
-            let command = stdio.unwrap();
+            let request_timeout = std::time::Duration::from_secs(timeout.max(1));
+            let (target_label, mut session, conn_target) = match (stdio, target) {
+                (Some(command), None) => {
+                    let mut transport = StdioTransport::spawn(&command)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Failed to start server: {e}"))?;
+                    transport.set_read_timeout(request_timeout);
+                    (
+                        command.clone(),
+                        McpSession::new(Box::new(transport)),
+                        ConnectionTarget::Stdio { command },
+                    )
+                }
+                (None, Some(endpoint)) => {
+                    let transport = HttpSseTransport::new(endpoint.clone(), request_timeout);
+                    (
+                        endpoint.clone(),
+                        McpSession::new(Box::new(transport)),
+                        ConnectionTarget::HttpSse { endpoint },
+                    )
+                }
+                _ => unreachable!(),
+            };
 
             eprintln!("{}", "AgentOx".bold().cyan());
             eprintln!("{} v{}", "Version".dimmed(), env!("CARGO_PKG_VERSION"));
-            eprintln!("{} {}", "Target".dimmed(), command);
+            eprintln!("{} {}", "Target".dimmed(), target_label);
             eprintln!();
 
             // --- Connect and initialize ---
-            let mut transport = StdioTransport::spawn(&command)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to start server: {e}"))?;
-            let request_timeout = std::time::Duration::from_secs(timeout.max(1));
-            transport.set_read_timeout(request_timeout);
-
-            let mut session = McpSession::new(Box::new(transport));
             let init_result = session
                 .initialize()
                 .await
@@ -142,7 +153,7 @@ async fn main() -> anyhow::Result<()> {
             );
 
             // --- Build check context ---
-            let mut ctx = CheckContext::new(session, command.clone());
+            let mut ctx = CheckContext::new(session, conn_target);
             ctx.init_result = Some(init_result.clone());
             ctx.request_timeout = request_timeout;
 
@@ -163,8 +174,8 @@ async fn main() -> anyhow::Result<()> {
             match only {
                 Some(CheckCategoryFilter::Conformance) => runner.register_conformance_checks(),
                 Some(CheckCategoryFilter::Security) => runner.register_security_checks(),
-                Some(CheckCategoryFilter::Behavioral) => unreachable!(),
-                None => runner.register_default_v0_2_checks(),
+                Some(CheckCategoryFilter::Behavioral) => runner.register_behavioral_checks(),
+                None => runner.register_default_v0_4_checks(),
             }
 
             let total_checks = runner.check_count();
@@ -219,7 +230,7 @@ async fn main() -> anyhow::Result<()> {
 
             let report = AuditReport::from_results(
                 all_results,
-                command,
+                target_label,
                 server_info,
                 protocol_version,
                 duration_ms,

@@ -245,14 +245,14 @@ agentox audit [OPTIONS]
 
 Options:
   --stdio <COMMAND>      Server command for stdio transport
-  --target <URL>         Server HTTP/SSE endpoint URL (reserved, not implemented yet)
+  --target <URL>         Server HTTP/SSE endpoint URL (beta)
   --format <FORMAT>      Output format: text (default) or json [default: text]
   --only <CATEGORY>      Run only specific check categories: conformance, security, behavioral
   --timeout <SECONDS>    Per-check timeout in seconds [default: 30]
   --no-color             Disable colored output
 ```
 
-In v0.2, `--stdio` is required. `--target` is reserved for a future HTTP/SSE transport.
+Exactly one target is required: use either `--stdio` or `--target`.
 
 ### Exit codes
 
@@ -497,9 +497,9 @@ Use verbose mode to see the raw JSON-RPC exchange:
 agentox -v audit --stdio "your-server-command"
 ```
 
-### "HTTP/SSE transport is not yet implemented"
+### "HTTP/SSE transport is beta"
 
-The `--target` flag for HTTP/SSE servers is still pending. For now, use `--stdio` with a command that spawns the server process.
+The `--target` flag is available in v0.4 as beta. Prefer `--stdio` for the most stable path if your server supports both.
 
 ### No colored output in my terminal
 
@@ -509,7 +509,7 @@ Some terminals or CI environments don't support ANSI colors. If colors look garb
 
 ## Conformance Checks Reference
 
-All 10 conformance checks included in v0.3.0:
+All 10 conformance checks included in v0.4.0:
 
 | ID | Name | What it validates | Severity on Fail |
 |----|------|------------------|-----------------|
@@ -526,7 +526,7 @@ All 10 conformance checks included in v0.3.0:
 
 ## Security Checks Reference
 
-Initial security checks included in v0.3.0:
+Initial security checks included in v0.4.0:
 
 | ID | Name | What it validates | Severity on Fail |
 |----|------|------------------|-----------------|
@@ -534,3 +534,13 @@ Initial security checks included in v0.3.0:
 | SEC-002 | Tool Parameter Boundary Validation | `tools/call` malformed parameters are rejected with JSON-RPC errors | HIGH |
 | SEC-003 | Error Leakage Detection | Error bodies do not leak sensitive internals (paths, traces, secret-like tokens) | MEDIUM |
 | SEC-004 | Resource-exhaustion Guardrail | Server stays responsive under bounded burst + large-input probes | MEDIUM |
+
+## Behavioral Checks Reference
+
+Behavioral checks included in v0.4.0:
+
+| ID | Name | What it validates | Severity on Fail |
+|----|------|------------------|-----------------|
+| BHV-001 | Idempotency Baseline | Repeated `tools/list` calls produce stable fingerprints | MEDIUM |
+| BHV-002 | Schema-output Alignment | `tools/call` result aligns with declared `outputSchema` | HIGH |
+| BHV-003 | Deterministic Error Semantics | Repeated malformed calls return stable error semantics | MEDIUM |

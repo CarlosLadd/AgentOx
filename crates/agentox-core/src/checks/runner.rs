@@ -1,8 +1,7 @@
 //! Check runner — orchestrates check execution against an MCP session.
 
 use crate::checks::types::{CheckCategory, CheckResult};
-use crate::client::stdio::StdioTransport;
-use crate::client::McpSession;
+use crate::client::{HttpSseTransport, McpSession, StdioTransport};
 use crate::protocol::mcp_types::{InitializeResult, Tool};
 use std::time::Duration;
 
@@ -26,8 +25,8 @@ pub trait Check: Send + Sync {
 pub struct CheckContext {
     /// The active MCP session.
     pub session: McpSession,
-    /// The original command used to spawn the server (for reconnection).
-    pub command: String,
+    /// Original connection target used to create reconnectable disposable sessions.
+    pub target: ConnectionTarget,
     /// Parsed initialize result.
     pub init_result: Option<InitializeResult>,
     /// Raw initialize response string.
@@ -38,12 +37,18 @@ pub struct CheckContext {
     pub request_timeout: Duration,
 }
 
+#[derive(Debug, Clone)]
+pub enum ConnectionTarget {
+    Stdio { command: String },
+    HttpSse { endpoint: String },
+}
+
 impl CheckContext {
     /// Create a new check context.
-    pub fn new(session: McpSession, command: String) -> Self {
+    pub fn new(session: McpSession, target: ConnectionTarget) -> Self {
         Self {
             session,
-            command,
+            target,
             init_result: None,
             raw_init_response: None,
             tools: None,
@@ -51,15 +56,28 @@ impl CheckContext {
         }
     }
 
+    /// Spawn a fresh session without initializing it.
+    pub async fn fresh_session(&self) -> Result<McpSession, crate::error::SessionError> {
+        match &self.target {
+            ConnectionTarget::Stdio { command } => {
+                let mut transport = StdioTransport::spawn_quiet(command)
+                    .await
+                    .map_err(crate::error::SessionError::Transport)?;
+                transport.set_read_timeout(self.request_timeout);
+                Ok(McpSession::new(Box::new(transport)))
+            }
+            ConnectionTarget::HttpSse { endpoint } => {
+                let transport = HttpSseTransport::new(endpoint.clone(), self.request_timeout);
+                Ok(McpSession::new(Box::new(transport)))
+            }
+        }
+    }
+
     /// Spawn a fresh disposable session for destructive tests.
     /// The caller is responsible for shutting it down.
     /// Uses `spawn_quiet` to suppress server stderr noise.
     pub async fn disposable_session(&self) -> Result<McpSession, crate::error::SessionError> {
-        let mut transport = StdioTransport::spawn_quiet(&self.command)
-            .await
-            .map_err(crate::error::SessionError::Transport)?;
-        transport.set_read_timeout(self.request_timeout);
-        let mut session = McpSession::new(Box::new(transport));
+        let mut session = self.fresh_session().await?;
         session.initialize().await?;
         Ok(session)
     }
@@ -105,12 +123,18 @@ impl CheckRunner {
     }
 
     /// Register behavioral checks (reserved for future versions).
-    pub fn register_behavioral_checks(&mut self) {}
+    pub fn register_behavioral_checks(&mut self) {
+        use crate::checks::behavioral::*;
+        self.register(Box::new(IdempotencyBaseline));
+        self.register(Box::new(SchemaOutputAlignment));
+        self.register(Box::new(DeterministicErrorSemantics));
+    }
 
-    /// Register default checks for v0.2 (conformance + security).
-    pub fn register_default_v0_2_checks(&mut self) {
+    /// Register default checks for v0.4 (conformance + security + behavioral).
+    pub fn register_default_v0_4_checks(&mut self) {
         self.register_conformance_checks();
         self.register_security_checks();
+        self.register_behavioral_checks();
     }
 
     /// Get the total number of registered checks.

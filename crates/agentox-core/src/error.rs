@@ -23,6 +23,9 @@ pub enum TransportError {
 
     #[error("unsupported transport operation: {0}")]
     Unsupported(String),
+
+    #[error("http transport error: {0}")]
+    Http(String),
 }
 
 /// Errors that can occur during an MCP session.
