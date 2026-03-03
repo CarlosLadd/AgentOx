@@ -1,22 +1,22 @@
 //! SEC-003: Detect sensitive details leaking through error messages.
 
 use crate::checks::runner::{Check, CheckContext};
+use crate::checks::security::constants::{
+    truncate_for_evidence, EVIDENCE_MAX_CHARS, LEAK_ALLOWLIST_CONTEXTS, LEAK_PATTERNS,
+};
 use crate::checks::types::{CheckCategory, CheckResult, Severity};
 use crate::protocol::jsonrpc::JsonRpcRequest;
 
 pub struct ErrorLeakageDetection;
 
-const LEAK_PATTERNS: &[&str] = &[
-    "/users/",
-    "/home/",
-    "traceback",
-    "stack trace",
-    "panic at",
-    "exception:",
-    "aws_secret_access_key",
-    "api_key",
-    "bearer ",
-];
+fn is_allowlisted_context(pattern: &str, content_lower: &str) -> bool {
+    if pattern != "api_key" {
+        return false;
+    }
+    LEAK_ALLOWLIST_CONTEXTS
+        .iter()
+        .any(|ctx| content_lower.contains(ctx))
+}
 
 #[async_trait::async_trait]
 impl Check for ErrorLeakageDetection {
@@ -65,7 +65,10 @@ impl Check for ErrorLeakageDetection {
                             haystack.push_str(&data.to_string());
                         }
                         let lower = haystack.to_ascii_lowercase();
-                        if let Some(pattern) = LEAK_PATTERNS.iter().find(|p| lower.contains(**p)) {
+                        if let Some(pattern) = LEAK_PATTERNS
+                            .iter()
+                            .find(|p| lower.contains(**p) && !is_allowlisted_context(p, &lower))
+                        {
                             findings.push(
                                 CheckResult::fail(
                                     self.id(),
@@ -78,7 +81,7 @@ impl Check for ErrorLeakageDetection {
                                 .with_evidence(serde_json::json!({
                                     "probe": label,
                                     "pattern": pattern,
-                                    "error_excerpt": lower.chars().take(240).collect::<String>(),
+                                    "error_excerpt": truncate_for_evidence(&lower, EVIDENCE_MAX_CHARS),
                                 })),
                             );
                         }

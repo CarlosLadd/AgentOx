@@ -36,11 +36,19 @@ agentox audit --stdio "./target/debug/mcp-test-server-rust"
 
 # JSON report
 agentox audit --stdio "./target/debug/mcp-test-server-rust" --format json
+
+# Security-only checks
+agentox audit --stdio "./target/debug/mcp-test-server-rust" --only security
 ```
 
 ### Expected Results
 
-9/10 conformance checks pass. CONF-005 (malformed request handling) fails because the rmcp SDK disconnects on truncated JSON instead of returning a JSON-RPC parse error (`-32700`). This is a known limitation of the SDK, not of the server implementation.
+For AgentOx `v0.2`, expected baseline is **13/14**:
+- `CONF-001..004`, `CONF-006..010` pass
+- `SEC-001..004` pass
+- `CONF-005` fails
+
+`CONF-005` (malformed request handling) fails because the rmcp SDK disconnects on truncated JSON instead of returning a JSON-RPC parse error (`-32700`). This is a known SDK limitation, not a server business-logic bug.
 
 ```
   [PASS] CONF-001 Initialize returns valid capabilities
@@ -53,4 +61,12 @@ agentox audit --stdio "./target/debug/mcp-test-server-rust" --format json
   [PASS] CONF-008 Capability negotiation
   [PASS] CONF-009 Protocol version validation
   [PASS] CONF-010 Initialized notification handling
+  [PASS] SEC-001 Prompt-injection echo safety
+  [PASS] SEC-002 Tool parameter boundary validation
+  [PASS] SEC-003 Error leakage detection
+  [PASS] SEC-004 Resource-exhaustion guardrail
 ```
+
+### Expected Failure Policy
+
+`CONF-005` is an expected failure for this test target. Treat it as non-blocking for routine test-server maintenance unless the behavior changes upstream in rmcp or AgentOx intentionally tightens/changes policy.

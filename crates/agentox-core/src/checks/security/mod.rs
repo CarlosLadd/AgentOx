@@ -1,5 +1,6 @@
 //! Security checks (SEC-001+).
 
+mod constants;
 mod error_leakage;
 mod prompt_injection_echo;
 mod resource_exhaustion;

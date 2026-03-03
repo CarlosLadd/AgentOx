@@ -11,17 +11,29 @@ use agentox_core::{
     client::{session::McpSession, stdio::StdioTransport},
     report::types::AuditReport,
 };
+use std::collections::HashSet;
 
 /// Absolute path to the compiled mock server binary.
 fn mock_server_bin() -> String {
-    let manifest = env!("CARGO_MANIFEST_DIR");
-    let root = std::path::Path::new(manifest)
-        .join("../..")
-        .canonicalize()
-        .expect("cannot resolve workspace root");
-    root.join("target/debug/mock-mcp-server")
+    workspace_root()
+        .join("target/debug/mock-mcp-server")
         .to_string_lossy()
         .to_string()
+}
+
+fn rust_sdk_server_bin() -> String {
+    workspace_root()
+        .join("target/debug/mcp-test-server-rust")
+        .to_string_lossy()
+        .to_string()
+}
+
+fn workspace_root() -> std::path::PathBuf {
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    std::path::Path::new(manifest)
+        .join("../..")
+        .canonicalize()
+        .expect("cannot resolve workspace root")
 }
 
 /// Build a `CheckContext` connected to a mock server.
@@ -55,6 +67,25 @@ async fn setup_ctx(env_overrides: &[(&str, &str)]) -> CheckContext {
     let tools = ctx.session.list_tools().await.unwrap_or_default();
     ctx.tools = Some(tools);
 
+    ctx
+}
+
+async fn setup_ctx_from_command(shell_cmd: String) -> CheckContext {
+    let transport = StdioTransport::spawn(&shell_cmd)
+        .await
+        .unwrap_or_else(|e| panic!("failed to spawn server ({shell_cmd}): {e}"));
+
+    let mut session = McpSession::new(Box::new(transport));
+    let init_result = session
+        .initialize()
+        .await
+        .expect("failed to initialize MCP session");
+
+    let mut ctx = CheckContext::new(session, shell_cmd);
+    ctx.init_result = Some(init_result);
+
+    let tools = ctx.session.list_tools().await.unwrap_or_default();
+    ctx.tools = Some(tools);
     ctx
 }
 
@@ -208,4 +239,69 @@ async fn test_default_v0_2_runner_includes_conf_and_security() {
 
     assert!(has_conf, "Default v0.2 runner must include CONF-* checks");
     assert!(has_sec, "Default v0.2 runner must include SEC-* checks");
+}
+
+#[tokio::test]
+async fn test_default_v0_2_json_report_has_expected_shape_and_counts() {
+    let mut ctx = setup_ctx(&[]).await;
+    let mut runner = CheckRunner::new();
+    runner.register_default_v0_2_checks();
+
+    let results = runner.run_all(&mut ctx).await;
+    let _ = ctx.session.shutdown().await;
+    let report = AuditReport::from_results(results, "mock-server".to_string(), None, None, 100);
+
+    assert_eq!(report.summary.total_checks, 14);
+    assert_eq!(report.summary.passed + report.summary.failed, 14);
+    let by_sev_total: usize = report.summary.by_severity.values().sum();
+    assert_eq!(by_sev_total, report.summary.failed);
+
+    let categories: HashSet<_> = report
+        .results
+        .iter()
+        .map(|r| serde_json::to_string(&r.category).expect("category should serialize"))
+        .collect();
+    assert!(categories.contains("\"conformance\""));
+    assert!(categories.contains("\"security\""));
+}
+
+#[tokio::test]
+async fn test_rust_sdk_server_expected_profile_conf_005_only() {
+    // Build the SDK server first to ensure binary exists for this profile test.
+    let build_status = std::process::Command::new("cargo")
+        .args(["build", "-p", "mcp-test-server-rust"])
+        .current_dir(workspace_root())
+        .status()
+        .expect("failed to invoke cargo build for rust sdk server");
+    assert!(
+        build_status.success(),
+        "cargo build for rust sdk server failed"
+    );
+
+    let mut ctx = setup_ctx_from_command(rust_sdk_server_bin()).await;
+    let mut runner = CheckRunner::new();
+    runner.register_default_v0_2_checks();
+    let results = runner.run_all(&mut ctx).await;
+    let _ = ctx.session.shutdown().await;
+
+    let failed_ids: Vec<String> = results
+        .iter()
+        .filter(|r| !r.passed)
+        .map(|r| r.check_id.clone())
+        .collect();
+    assert_eq!(
+        failed_ids,
+        vec!["CONF-005".to_string()],
+        "Expected only CONF-005 to fail against rust-sdk server profile"
+    );
+
+    let sec_results: Vec<_> = results
+        .iter()
+        .filter(|r| r.check_id.starts_with("SEC-"))
+        .collect();
+    assert_eq!(sec_results.len(), 4, "Expected 4 security checks");
+    assert!(
+        sec_results.iter().all(|r| r.passed),
+        "All security checks should pass on rust-sdk server baseline"
+    );
 }

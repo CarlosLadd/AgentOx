@@ -20,6 +20,9 @@ pub enum TransportError {
 
     #[error("command parsing error: {0}")]
     CommandParse(String),
+
+    #[error("unsupported transport operation: {0}")]
+    Unsupported(String),
 }
 
 /// Errors that can occur during an MCP session.

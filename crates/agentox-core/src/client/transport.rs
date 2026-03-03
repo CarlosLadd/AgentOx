@@ -3,9 +3,24 @@
 use crate::error::TransportError;
 use crate::protocol::jsonrpc::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse};
 
+/// Transport capabilities used by checks and future transport-specific logic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TransportCapabilities {
+    pub request_response: bool,
+    pub streaming_notifications: bool,
+}
+
 /// Trait for sending/receiving raw JSON-RPC messages over any transport.
 #[async_trait::async_trait]
 pub trait Transport: Send + Sync {
+    /// Capability metadata for this transport implementation.
+    fn capabilities(&self) -> TransportCapabilities {
+        TransportCapabilities {
+            request_response: true,
+            streaming_notifications: false,
+        }
+    }
+
     /// Write a raw message string without reading a response.
     /// Used for notifications and other one-way messages.
     async fn write_raw(&mut self, message: &str) -> Result<(), TransportError>;
