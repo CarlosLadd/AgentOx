@@ -153,9 +153,17 @@ agentox audit --stdio "npx my-mcp-server" || {
 |---------|-------|--------|
 | **v0.1** | Protocol Conformance (10 checks, stdio transport) | ✅ Done |
 | **v0.2** | Security Surface Analysis (initial `SEC-*` suite, stdio transport) | ✅ Done |
-| **v0.3** | HTTP/SSE transport + CI/CD packaging (GitHub Action, Docker image) | ✅ Done |
+| **v0.3** | HTTP/SSE transport + CI/CD hardening | ✅ Done |
 | **v0.4** | Behavioral Contracts + HTTP/SSE transport | ✅ Done |
 | **v1.0** | Stable CLI/JSON API + HTTP/SSE transport GA (basic) | ✅ Done |
+| **v1.0.1** | Reliability patch (transport/check hardening, diagnostics) | 📋 Planned |
+| **v1.0.2** | DX patch (`--quiet`, `--output`, perf/documentation) | 📋 Planned |
+| **v1.1** | Additive execution controls (`--check`, `--skip-check`, profiles, baseline compare) | 📋 Planned |
+| **v1.2** | Advanced HTTP/SSE streaming lifecycle GA | 📋 Planned |
+| **v1.3** | CI/Ecosystem integration (official Action + JSON schema artifact) | 📋 Planned |
+| **v2.0** | Reserved for justified breaking changes only | ⏳ Criteria-based |
+
+Detailed release-train plan: [ROADMAP.md](ROADMAP.md)
 
 ---
 

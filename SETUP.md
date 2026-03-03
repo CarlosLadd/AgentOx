@@ -270,6 +270,14 @@ Starting with v1.0.0, AgentOx guarantees semantic stability for:
 `agentox-core` internal Rust APIs are not semver-stable yet.
 HTML reports are explicitly out of scope for v1.0.0.
 
+### Post-v1 Version Policy
+
+- `v1.0.x`: reliability and DX hardening only (no breaking CLI/JSON contract changes)
+- `v1.1+`: additive features only
+- `v2.0.0`: only when a breaking change is justified by architecture or schema evolution
+
+See [ROADMAP.md](ROADMAP.md) for the full release train (`v1.0.1` → `v2.0.0` entry criteria).
+
 ---
 
 ## Usage Examples
