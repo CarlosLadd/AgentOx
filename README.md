@@ -137,7 +137,7 @@ AgentOx is positioned as a protocol-neutral security layer for agentic tool syst
 ### GitHub Actions
 
 ```yaml
-- name: Audit MCP server
+- name: Audit tool server
   run: |
     cargo install agentox-cli
     agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" \
@@ -154,7 +154,7 @@ AgentOx is positioned as a protocol-neutral security layer for agentic tool syst
 
 ```sh
 agentox audit --stdio "npx my-mcp-server" || {
-  echo "MCP server failed audit — blocking deploy"
+  echo "Tool server failed audit — blocking deploy"
   exit 1
 }
 ```
@@ -172,9 +172,10 @@ agentox audit --stdio "npx my-mcp-server" || {
 | **v1.0** | Stable CLI/JSON API + HTTP/SSE transport GA (basic) | ✅ Done |
 | **v1.0.1** | Reliability patch (transport/check hardening, diagnostics) | 📋 Planned |
 | **v1.0.2** | DX patch (`--quiet`, `--output`, perf/documentation) | 📋 Planned |
-| **v1.1** | Additive execution controls (`--check`, `--skip-check`, profiles, baseline compare) | 📋 Planned |
-| **v1.2** | Advanced HTTP/SSE streaming lifecycle GA | 📋 Planned |
-| **v1.3** | CI/Ecosystem integration (official Action + JSON schema artifact) | 📋 Planned |
+| **v1.1** | Platform core extraction (protocol adapter layer + canonical model) | 📋 Planned |
+| **v1.2** | Policy/evidence moat (`--policy`, baseline regression, signed evidence) | 📋 Planned |
+| **v1.3** | A2A adapter GA + protocol capability matrix | 📋 Planned |
+| **v1.4** | OpenAI tool_use adapter GA + cross-protocol parity | 📋 Planned |
 | **v2.0** | Reserved for justified breaking changes only | ⏳ Criteria-based |
 
 Detailed release-train plan: [ROADMAP.md](ROADMAP.md)
@@ -188,8 +189,10 @@ AgentOx is a Cargo workspace with a clean library/CLI separation:
 ```
 crates/
 ├── agentox-core/   # Core audit engine (embeddable library)
-│   ├── client/     # MCP transport + session
+│   ├── client/     # Transports + adapter-backed sessions
 │   ├── checks/     # Audit checks (conformance, security, behavioral)
+│   ├── platform/   # Protocol adapters + canonical tool model
+│   ├── policy/     # Policy-as-code + baseline regression evaluation
 │   ├── protocol/   # JSON-RPC 2.0 + MCP 2025-11-25 types
 │   └── report/     # Text + JSON report renderers
 └── agentox-cli/    # Thin CLI wrapper (main.rs + clap)

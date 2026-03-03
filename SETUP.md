@@ -276,7 +276,7 @@ HTML reports are explicitly out of scope for v1.0.0.
 ### Post-v1 Version Policy
 
 - `v1.0.x`: reliability and DX hardening only (no breaking CLI/JSON contract changes)
-- `v1.1+`: additive features only
+- `v1.1+`: additive features only, including staged multi-protocol expansion (MCP → A2A → OpenAI tool_use)
 - `v2.0.0`: only when a breaking change is justified by architecture or schema evolution
 
 See [ROADMAP.md](ROADMAP.md) for the full release train (`v1.0.1` → `v2.0.0` entry criteria).
@@ -285,7 +285,7 @@ See [ROADMAP.md](ROADMAP.md) for the full release train (`v1.0.1` → `v2.0.0` e
 
 ## Usage Examples
 
-### Basic audit of an MCP server
+### Basic audit of a tool server (MCP default)
 
 Audit a server that runs via stdio (the most common pattern):
 
@@ -336,9 +336,15 @@ Sample JSON structure:
 
 ```json
 {
+  "schema_version": "1.0",
   "agentox_version": "0.1.0",
   "timestamp": "2026-03-01T23:56:51.627703+00:00",
   "target": "npx -y @modelcontextprotocol/server-filesystem /tmp",
+  "protocol": "mcp",
+  "adapter": {
+    "name": "mcp-compat",
+    "version": "1.0.0"
+  },
   "server_info": {
     "name": "filesystem",
     "version": "0.6.2"
@@ -357,12 +363,33 @@ Sample JSON structure:
     }
   ],
   "summary": {
-    "total_checks": 10,
-    "passed": 10,
+    "total_checks": 17,
+    "passed": 17,
     "failed": 0,
     "duration_ms": 342
+  },
+  "evidence_signature": {
+    "algorithm": "sha256",
+    "digest_hex": "…",
+    "verifier": "agentox verify --report <FILE>"
   }
 }
+```
+
+### Select protocol adapter
+
+```sh
+agentox audit --target "http://localhost:8080" --protocol a2a
+agentox audit --target "http://localhost:8080" --protocol openai-tool-use
+```
+
+### Enforce policy and baseline gates
+
+```sh
+agentox audit --stdio "your-server-command" \
+  --policy agentox-policy.yaml \
+  --baseline previous-report.json \
+  --format json
 ```
 
 ### Audit the built-in mock server
@@ -418,7 +445,7 @@ AgentOx returns exit code `1` when any check fails, making it a natural CI gate:
 ```sh
 agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" \
   --format json --no-color || {
-    echo "MCP server failed audit — blocking deploy"
+    echo "Tool server failed audit — blocking deploy"
     exit 1
 }
 ```
@@ -438,7 +465,7 @@ jobs:
       - name: Install AgentOx
         run: cargo install agentox-cli
 
-      - name: Audit MCP server
+      - name: Audit tool server
         run: |
           agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" \
             --format json --no-color | tee audit-report.json
@@ -451,7 +478,7 @@ jobs:
           path: audit-report.json
 ```
 
-### Audit a Python-based MCP server
+### Audit a Python-based tool server
 
 ```sh
 agentox audit --stdio "python -m my_mcp_server"
@@ -503,13 +530,13 @@ cargo build --workspace
 cargo test --workspace
 ```
 
-### "MCP handshake failed" when auditing a server
+### Handshake failed when auditing a server
 
-The target server either crashed during startup or does not speak MCP. Check that:
+The target server either crashed during startup or does not match the selected protocol adapter. Check that:
 
 1. The server command runs successfully on its own (e.g., `npx -y @modelcontextprotocol/server-filesystem /tmp`)
 2. The server uses stdio (stdin/stdout) for communication
-3. The server implements the MCP `initialize` handshake
+3. The server implements the expected handshake/lifecycle for the selected adapter (`--protocol`)
 
 Use verbose mode to see the raw JSON-RPC exchange:
 
@@ -519,7 +546,7 @@ agentox -v audit --stdio "your-server-command"
 
 ### HTTP/SSE transport behavior
 
-The `--target` flag is GA for basic request/response transport in v1.0. Advanced streaming lifecycle/resumption remains out of scope for this release.
+The `--target` flag is GA for basic request/response transport in v1.x. Advanced streaming lifecycle/resumption remains scheduled for the roadmap stream.
 
 ### No colored output in my terminal
 
