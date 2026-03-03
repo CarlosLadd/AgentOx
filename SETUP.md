@@ -21,7 +21,7 @@ Complete instructions for building, testing, and running AgentOx from source.
 
 | Requirement  | Minimum Version | Check Command        |
 |--------------|-----------------|----------------------|
-| Rust toolchain | 1.75.0        | `rustc --version`    |
+| Rust toolchain | 1.93.1        | `rustc --version`    |
 | Cargo        | (bundled with Rust) | `cargo --version` |
 | Git          | any             | `git --version`      |
 
@@ -472,7 +472,7 @@ Your Rust toolchain is too old. Update with:
 rustup update stable
 ```
 
-AgentOx requires Rust 1.75.0 or later.
+AgentOx requires Rust 1.93.1 or later.
 
 ### Integration tests fail with "failed to spawn mock server"
 

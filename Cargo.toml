@@ -6,7 +6,7 @@ members = ["crates/agentox-core", "crates/agentox-cli", "tests/mock_server", "mc
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-rust-version = "1.75.0"
+rust-version = "1.93.1"
 repository = "https://github.com/CarlosLadd/AgentOx"
 description = "Audit MCP servers for protocol conformance, security, and behavior"
 
