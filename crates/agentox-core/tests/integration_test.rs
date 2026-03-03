@@ -8,7 +8,8 @@
 
 use agentox_core::{
     checks::runner::{CheckContext, CheckRunner, ConnectionTarget},
-    client::{session::McpSession, stdio::StdioTransport},
+    client::{session::McpSession, stdio::StdioTransport, AgentSession},
+    platform::{AgentProtocol, McpProtocolAdapter, ProtocolAdapter},
     report::types::AuditReport,
 };
 use std::collections::HashSet;
@@ -55,7 +56,9 @@ async fn setup_ctx(env_overrides: &[(&str, &str)]) -> CheckContext {
         .await
         .unwrap_or_else(|e| panic!("failed to spawn mock server ({shell_cmd}): {e}"));
 
-    let mut session = McpSession::new(Box::new(transport));
+    let mcp_session = McpSession::new(Box::new(transport));
+    let adapter: Box<dyn ProtocolAdapter> = Box::new(McpProtocolAdapter::new(mcp_session));
+    let mut session = AgentSession::new(adapter);
     let init_result = session
         .initialize()
         .await
@@ -65,6 +68,7 @@ async fn setup_ctx(env_overrides: &[(&str, &str)]) -> CheckContext {
         session,
         ConnectionTarget::Stdio {
             command: shell_cmd.clone(),
+            protocol: AgentProtocol::Mcp,
         },
     );
     ctx.init_result = Some(init_result);
@@ -80,7 +84,9 @@ async fn setup_ctx_from_command(shell_cmd: String) -> CheckContext {
         .await
         .unwrap_or_else(|e| panic!("failed to spawn server ({shell_cmd}): {e}"));
 
-    let mut session = McpSession::new(Box::new(transport));
+    let mcp_session = McpSession::new(Box::new(transport));
+    let adapter: Box<dyn ProtocolAdapter> = Box::new(McpProtocolAdapter::new(mcp_session));
+    let mut session = AgentSession::new(adapter);
     let init_result = session
         .initialize()
         .await
@@ -90,6 +96,7 @@ async fn setup_ctx_from_command(shell_cmd: String) -> CheckContext {
         session,
         ConnectionTarget::Stdio {
             command: shell_cmd.clone(),
+            protocol: AgentProtocol::Mcp,
         },
     );
     ctx.init_result = Some(init_result);

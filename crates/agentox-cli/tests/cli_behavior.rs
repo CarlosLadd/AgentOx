@@ -236,6 +236,52 @@ fn test_target_flag_performs_audit() {
 }
 
 #[test]
+fn test_protocol_flag_a2a_executes_compat_path() {
+    let endpoint = start_http_mock_server();
+    let output = Command::new(env!("CARGO_BIN_EXE_agentox"))
+        .args([
+            "audit",
+            "--target",
+            &endpoint,
+            "--protocol",
+            "a2a",
+            "--only",
+            "conformance",
+            "--format",
+            "text",
+            "--no-color",
+        ])
+        .output()
+        .expect("failed to run agentox");
+    assert!(output.status.code().is_some());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("CONF-001"));
+}
+
+#[test]
+fn test_protocol_flag_openai_tool_use_executes_compat_path() {
+    let endpoint = start_http_mock_server();
+    let output = Command::new(env!("CARGO_BIN_EXE_agentox"))
+        .args([
+            "audit",
+            "--target",
+            &endpoint,
+            "--protocol",
+            "openai-tool-use",
+            "--only",
+            "conformance",
+            "--format",
+            "text",
+            "--no-color",
+        ])
+        .output()
+        .expect("failed to run agentox");
+    assert!(output.status.code().is_some());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("CONF-001"));
+}
+
+#[test]
 fn test_stdio_and_target_together_fail() {
     let output = Command::new(env!("CARGO_BIN_EXE_agentox"))
         .args([
@@ -278,6 +324,9 @@ fn test_json_mode_keeps_stdout_machine_readable() {
     let parsed: serde_json::Value =
         serde_json::from_str(&stdout).expect("stdout must contain valid JSON report only");
     assert!(parsed.get("schema_version").is_some());
+    assert!(parsed.get("protocol").is_some());
+    assert!(parsed.get("adapter").is_some());
+    assert!(parsed.get("evidence_signature").is_some());
     assert!(
         !stderr.is_empty(),
         "stderr should contain run/progress summary"

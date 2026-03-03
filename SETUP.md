@@ -238,7 +238,7 @@ Options:
 
 ### `agentox audit`
 
-Run a full audit against an MCP server.
+Run a full audit against an agent tool server via MCP/A2A/OpenAI tool_use compatibility adapters.
 
 ```
 agentox audit [OPTIONS]
@@ -249,6 +249,9 @@ Options:
   --format <FORMAT>      Output format: text (default) or json [default: text]
   --only <CATEGORY>      Run only specific check categories: conformance, security, behavioral
   --timeout <SECONDS>    Per-check timeout in seconds [default: 30]
+  --protocol <PROTOCOL>  Protocol adapter: mcp, a2a, openai-tool-use [default: mcp]
+  --policy <FILE>        Policy bundle YAML for pass/warn/fail gating
+  --baseline <REPORT>    Baseline JSON report for regression comparison
   --no-color             Disable colored output
 ```
 
@@ -258,8 +261,8 @@ Exactly one target is required: use either `--stdio` or `--target`.
 
 | Code | Meaning |
 |------|---------|
-| `0`  | All checks passed |
-| `1`  | One or more checks failed (findings detected) |
+| `0`  | All checks passed and policy gates (if provided) did not fail |
+| `1`  | One or more checks failed, or policy/baseline gate failed |
 
 ### Stable Contract (v1.0.0)
 

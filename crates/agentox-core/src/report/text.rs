@@ -20,8 +20,20 @@ pub fn render(report: &AuditReport) -> String {
     }
     out.push_str(&format!(
         "Protocol: {}\n\n",
-        report.protocol_version.as_deref().unwrap_or("?")
+        report
+            .protocol
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| report
+                .protocol_version
+                .clone()
+                .unwrap_or_else(|| "?".to_string()))
     ));
+    if let Some(adapter) = &report.adapter {
+        out.push_str(&format!(
+            "Adapter: {} v{}\n\n",
+            adapter.name, adapter.version
+        ));
+    }
 
     // Results
     for result in &report.results {
@@ -61,6 +73,9 @@ pub fn render(report: &AuditReport) -> String {
         }
     ));
     out.push_str(&format!("  Duration: {}ms\n", report.summary.duration_ms));
+    if let Some(policy) = &report.policy_decision {
+        out.push_str(&format!("  Policy: {:?}\n", policy.status));
+    }
 
     out
 }

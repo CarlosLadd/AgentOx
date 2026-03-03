@@ -18,6 +18,7 @@ tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+anyhow = { workspace = true }
 tracing = { workspace = true }
 async-trait = { workspace = true }
 colored = { workspace = true }
@@ -25,6 +26,8 @@ chrono = { workspace = true }
 shell-words = "1"
 jsonschema = "0.18"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+serde_yaml = "0.9"
+sha2 = "0.10"
 
 [dev-dependencies]
 tokio = { workspace = true }

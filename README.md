@@ -1,11 +1,11 @@
 # AgentOx
 
-**MCP Security & Conformance Auditor — Forged in Rust**
+**Agentic Tool Security Platform (MCP + A2A + OpenAI tool_use) — Forged in Rust**
 
 [![Crates.io](https://img.shields.io/crates/v/agentox-cli.svg)](https://crates.io/crates/agentox-cli)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-AgentOx is the open-source CLI tool for auditing [MCP (Model Context Protocol)](https://modelcontextprotocol.io) servers — checking protocol conformance, security surface, and behavioral contracts before any server ships to production.
+AgentOx is the open-source CLI tool for auditing agent tool servers across [MCP (Model Context Protocol)](https://modelcontextprotocol.io), A2A, and OpenAI tool_use compatibility paths — checking conformance, security surface, and behavioral contracts before any server ships to production.
 
 ---
 
@@ -39,6 +39,13 @@ agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" --on
 
 # Audit an HTTP/SSE endpoint
 agentox audit --target "http://localhost:8080"
+
+# Select protocol adapter explicitly
+agentox audit --target "http://localhost:8080" --protocol a2a
+
+# Enforce policy-as-code and baseline regression guard
+agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" \
+  --policy agentox-policy.yaml --baseline previous-report.json
 ```
 
 ---
@@ -119,6 +126,13 @@ The following interfaces are semver-stable starting in v1.0.0:
 
 `agentox-core` internal Rust APIs are not yet semver-frozen.
 HTML report generation is intentionally out of scope for v1.0.0.
+
+## Vendor-Neutral Direction
+
+AgentOx is positioned as a protocol-neutral security layer for agentic tool systems:
+- Shared security and behavioral checks across protocol adapters
+- Policy-as-code decisions for CI/CD (`--policy`)
+- Portable evidence signatures in JSON output for downstream verification
 
 ### GitHub Actions
 

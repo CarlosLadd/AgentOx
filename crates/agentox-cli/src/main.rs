@@ -1,6 +1,8 @@
 use agentox_core::{
     checks::runner::{CheckContext, CheckRunner, ConnectionTarget},
-    client::{session::McpSession, HttpSseTransport, StdioTransport},
+    client::{AgentSession, HttpSseTransport, StdioTransport},
+    platform::{A2aProtocolAdapter, AgentProtocol, McpProtocolAdapter, OpenAiToolUseAdapter},
+    policy,
     report::{json, text, types::AuditReport},
 };
 use clap::{Parser, Subcommand};
@@ -38,6 +40,23 @@ enum CheckCategoryFilter {
     Behavioral,
 }
 
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum ProtocolSelection {
+    Mcp,
+    A2a,
+    OpenaiToolUse,
+}
+
+impl From<ProtocolSelection> for AgentProtocol {
+    fn from(value: ProtocolSelection) -> Self {
+        match value {
+            ProtocolSelection::Mcp => AgentProtocol::Mcp,
+            ProtocolSelection::A2a => AgentProtocol::A2a,
+            ProtocolSelection::OpenaiToolUse => AgentProtocol::OpenAiToolUse,
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Audit an MCP server for protocol conformance and security issues
@@ -62,6 +81,18 @@ enum Commands {
         /// Per-check timeout in seconds
         #[arg(long, default_value = "30", value_name = "SECONDS")]
         timeout: u64,
+
+        /// Protocol adapter to use: mcp, a2a, openai-tool-use
+        #[arg(long, default_value = "mcp", value_name = "PROTOCOL")]
+        protocol: ProtocolSelection,
+
+        /// Policy bundle path (YAML)
+        #[arg(long, value_name = "FILE")]
+        policy: Option<String>,
+
+        /// Baseline report path for regression comparison
+        #[arg(long, value_name = "REPORT_JSON")]
+        baseline: Option<String>,
 
         /// Disable colored output
         #[arg(long)]
@@ -89,6 +120,9 @@ async fn main() -> anyhow::Result<()> {
             format,
             only,
             timeout,
+            protocol,
+            policy,
+            baseline,
             no_color,
         } => {
             if stdio.is_none() && target.is_none() {
@@ -110,24 +144,51 @@ async fn main() -> anyhow::Result<()> {
             }
 
             let request_timeout = std::time::Duration::from_secs(timeout.max(1));
+            let selected_protocol: AgentProtocol = protocol.into();
             let (target_label, mut session, conn_target) = match (stdio, target) {
                 (Some(command), None) => {
                     let mut transport = StdioTransport::spawn(&command)
                         .await
                         .map_err(|e| anyhow::anyhow!("Failed to start server: {e}"))?;
                     transport.set_read_timeout(request_timeout);
+                    let mcp_session =
+                        agentox_core::client::session::McpSession::new(Box::new(transport));
+                    let adapter: Box<dyn agentox_core::platform::ProtocolAdapter> =
+                        match selected_protocol {
+                            AgentProtocol::Mcp => Box::new(McpProtocolAdapter::new(mcp_session)),
+                            AgentProtocol::A2a => Box::new(A2aProtocolAdapter::new(mcp_session)),
+                            AgentProtocol::OpenAiToolUse => {
+                                Box::new(OpenAiToolUseAdapter::new(mcp_session))
+                            }
+                        };
                     (
                         command.clone(),
-                        McpSession::new(Box::new(transport)),
-                        ConnectionTarget::Stdio { command },
+                        AgentSession::new(adapter),
+                        ConnectionTarget::Stdio {
+                            command,
+                            protocol: selected_protocol,
+                        },
                     )
                 }
                 (None, Some(endpoint)) => {
                     let transport = HttpSseTransport::new(endpoint.clone(), request_timeout);
+                    let mcp_session =
+                        agentox_core::client::session::McpSession::new(Box::new(transport));
+                    let adapter: Box<dyn agentox_core::platform::ProtocolAdapter> =
+                        match selected_protocol {
+                            AgentProtocol::Mcp => Box::new(McpProtocolAdapter::new(mcp_session)),
+                            AgentProtocol::A2a => Box::new(A2aProtocolAdapter::new(mcp_session)),
+                            AgentProtocol::OpenAiToolUse => {
+                                Box::new(OpenAiToolUseAdapter::new(mcp_session))
+                            }
+                        };
                     (
                         endpoint.clone(),
-                        McpSession::new(Box::new(transport)),
-                        ConnectionTarget::HttpSse { endpoint },
+                        AgentSession::new(adapter),
+                        ConnectionTarget::HttpSse {
+                            endpoint,
+                            protocol: selected_protocol,
+                        },
                     )
                 }
                 _ => unreachable!(),
@@ -226,15 +287,59 @@ async fn main() -> anyhow::Result<()> {
 
             // --- Build report ---
             let protocol_version = ctx.session.protocol_version().map(|s| s.to_string());
-            let server_info = ctx.init_result.map(|i| i.server_info);
+            let server_info = ctx.init_result.as_ref().map(|i| i.server_info.clone());
 
-            let report = AuditReport::from_results(
+            let mut report = AuditReport::from_results(
                 all_results,
                 target_label,
                 server_info,
                 protocol_version,
                 duration_ms,
+            )
+            .with_protocol_metadata(
+                ctx.protocol(),
+                ctx.session.adapter_metadata(),
+                Vec::new(),
             );
+
+            if let Some(policy_path) = policy {
+                let bundle = policy::load_policy_file(&policy_path)?;
+                let env_name = std::env::var("AGENTOX_ENV").ok();
+                let decision = policy::evaluate_report(&report, &bundle, env_name.as_deref());
+                report = report.with_policy_decision(decision);
+            }
+
+            if let Some(baseline_path) = baseline {
+                let baseline_raw = std::fs::read_to_string(&baseline_path).map_err(|e| {
+                    anyhow::anyhow!("Failed reading baseline report {}: {e}", baseline_path)
+                })?;
+                let baseline_report: AuditReport =
+                    serde_json::from_str(&baseline_raw).map_err(|e| {
+                        anyhow::anyhow!("Failed parsing baseline report {}: {e}", baseline_path)
+                    })?;
+                let delta = policy::compare_with_baseline(&report, &baseline_report);
+                if !delta.new_high_or_critical.is_empty() {
+                    let mut reasons = vec![format!(
+                        "New HIGH/CRITICAL regressions vs baseline: {}",
+                        delta.new_high_or_critical.join(", ")
+                    )];
+                    if !delta.new_failed_checks.is_empty() {
+                        reasons.push(format!(
+                            "New failed checks: {}",
+                            delta.new_failed_checks.join(", ")
+                        ));
+                    }
+                    report =
+                        report.with_policy_decision(agentox_core::report::types::PolicyDecision {
+                            status: agentox_core::report::types::PolicyDecisionStatus::Fail,
+                            reasons,
+                        });
+                }
+            }
+
+            if let Ok(sig) = json::evidence_signature(&report) {
+                report = report.with_evidence_signature(sig);
+            }
 
             // --- Shut down session ---
             let _ = ctx.session.shutdown().await;
@@ -272,8 +377,14 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            // Non-zero exit code when findings exist — enables CI fail gates
-            if report.summary.failed > 0 {
+            // Non-zero exit code when findings exist or policy gates fail.
+            let policy_failed = report.policy_decision.as_ref().is_some_and(|decision| {
+                matches!(
+                    decision.status,
+                    agentox_core::report::types::PolicyDecisionStatus::Fail
+                )
+            });
+            if report.summary.failed > 0 || policy_failed {
                 std::process::exit(1);
             }
         }

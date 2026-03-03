@@ -6,5 +6,7 @@
 pub mod checks;
 pub mod client;
 pub mod error;
+pub mod platform;
+pub mod policy;
 pub mod protocol;
 pub mod report;

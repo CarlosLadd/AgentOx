@@ -1,7 +1,10 @@
 //! Check runner — orchestrates check execution against an MCP session.
 
 use crate::checks::types::{CheckCategory, CheckResult};
-use crate::client::{HttpSseTransport, McpSession, StdioTransport};
+use crate::client::{AgentSession, HttpSseTransport, McpSession, StdioTransport};
+use crate::platform::{
+    A2aProtocolAdapter, AgentProtocol, McpProtocolAdapter, OpenAiToolUseAdapter, ProtocolAdapter,
+};
 use crate::protocol::mcp_types::{InitializeResult, Tool};
 use std::time::Duration;
 
@@ -24,7 +27,7 @@ pub trait Check: Send + Sync {
 /// Context provided to checks during execution.
 pub struct CheckContext {
     /// The active MCP session.
-    pub session: McpSession,
+    pub session: AgentSession,
     /// Original connection target used to create reconnectable disposable sessions.
     pub target: ConnectionTarget,
     /// Parsed initialize result.
@@ -39,13 +42,19 @@ pub struct CheckContext {
 
 #[derive(Debug, Clone)]
 pub enum ConnectionTarget {
-    Stdio { command: String },
-    HttpSse { endpoint: String },
+    Stdio {
+        command: String,
+        protocol: AgentProtocol,
+    },
+    HttpSse {
+        endpoint: String,
+        protocol: AgentProtocol,
+    },
 }
 
 impl CheckContext {
     /// Create a new check context.
-    pub fn new(session: McpSession, target: ConnectionTarget) -> Self {
+    pub fn new(session: AgentSession, target: ConnectionTarget) -> Self {
         Self {
             session,
             target,
@@ -56,19 +65,36 @@ impl CheckContext {
         }
     }
 
-    /// Spawn a fresh session without initializing it.
-    pub async fn fresh_session(&self) -> Result<McpSession, crate::error::SessionError> {
+    pub fn protocol(&self) -> AgentProtocol {
         match &self.target {
-            ConnectionTarget::Stdio { command } => {
+            ConnectionTarget::Stdio { protocol, .. }
+            | ConnectionTarget::HttpSse { protocol, .. } => *protocol,
+        }
+    }
+
+    fn wrap_mcp_session(protocol: AgentProtocol, session: McpSession) -> Box<dyn ProtocolAdapter> {
+        match protocol {
+            AgentProtocol::Mcp => Box::new(McpProtocolAdapter::new(session)),
+            AgentProtocol::A2a => Box::new(A2aProtocolAdapter::new(session)),
+            AgentProtocol::OpenAiToolUse => Box::new(OpenAiToolUseAdapter::new(session)),
+        }
+    }
+
+    /// Spawn a fresh session without initializing it.
+    pub async fn fresh_session(&self) -> Result<AgentSession, crate::error::SessionError> {
+        match &self.target {
+            ConnectionTarget::Stdio { command, protocol } => {
                 let mut transport = StdioTransport::spawn_quiet(command)
                     .await
                     .map_err(crate::error::SessionError::Transport)?;
                 transport.set_read_timeout(self.request_timeout);
-                Ok(McpSession::new(Box::new(transport)))
+                let mcp = McpSession::new(Box::new(transport));
+                Ok(AgentSession::new(Self::wrap_mcp_session(*protocol, mcp)))
             }
-            ConnectionTarget::HttpSse { endpoint } => {
+            ConnectionTarget::HttpSse { endpoint, protocol } => {
                 let transport = HttpSseTransport::new(endpoint.clone(), self.request_timeout);
-                Ok(McpSession::new(Box::new(transport)))
+                let mcp = McpSession::new(Box::new(transport));
+                Ok(AgentSession::new(Self::wrap_mcp_session(*protocol, mcp)))
             }
         }
     }
@@ -76,7 +102,7 @@ impl CheckContext {
     /// Spawn a fresh disposable session for destructive tests.
     /// The caller is responsible for shutting it down.
     /// Uses `spawn_quiet` to suppress server stderr noise.
-    pub async fn disposable_session(&self) -> Result<McpSession, crate::error::SessionError> {
+    pub async fn disposable_session(&self) -> Result<AgentSession, crate::error::SessionError> {
         let mut session = self.fresh_session().await?;
         session.initialize().await?;
         Ok(session)
