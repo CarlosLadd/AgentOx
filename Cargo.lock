@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "agentox-cli"
-version = "0.4.0"
+version = "1.0.0"
 dependencies = [
  "agentox-core",
  "anyhow",
@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "agentox-core"
-version = "0.4.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "chrono",

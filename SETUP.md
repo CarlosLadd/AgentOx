@@ -245,7 +245,7 @@ agentox audit [OPTIONS]
 
 Options:
   --stdio <COMMAND>      Server command for stdio transport
-  --target <URL>         Server HTTP/SSE endpoint URL (beta)
+  --target <URL>         Server HTTP/SSE endpoint URL
   --format <FORMAT>      Output format: text (default) or json [default: text]
   --only <CATEGORY>      Run only specific check categories: conformance, security, behavioral
   --timeout <SECONDS>    Per-check timeout in seconds [default: 30]
@@ -260,6 +260,15 @@ Exactly one target is required: use either `--stdio` or `--target`.
 |------|---------|
 | `0`  | All checks passed |
 | `1`  | One or more checks failed (findings detected) |
+
+### Stable Contract (v1.0.0)
+
+Starting with v1.0.0, AgentOx guarantees semantic stability for:
+- CLI behavior and flag contract (`agentox audit` options + exit semantics)
+- JSON report schema emitted by `--format json` (`schema_version: "1.0"`)
+
+`agentox-core` internal Rust APIs are not semver-stable yet.
+HTML reports are explicitly out of scope for v1.0.0.
 
 ---
 
@@ -497,9 +506,9 @@ Use verbose mode to see the raw JSON-RPC exchange:
 agentox -v audit --stdio "your-server-command"
 ```
 
-### "HTTP/SSE transport is beta"
+### HTTP/SSE transport behavior
 
-The `--target` flag is available in v0.4 as beta. Prefer `--stdio` for the most stable path if your server supports both.
+The `--target` flag is GA for basic request/response transport in v1.0. Advanced streaming lifecycle/resumption remains out of scope for this release.
 
 ### No colored output in my terminal
 
@@ -509,7 +518,7 @@ Some terminals or CI environments don't support ANSI colors. If colors look garb
 
 ## Conformance Checks Reference
 
-All 10 conformance checks included in v0.4.0:
+All 10 conformance checks included in v1.0.0:
 
 | ID | Name | What it validates | Severity on Fail |
 |----|------|------------------|-----------------|
@@ -526,7 +535,7 @@ All 10 conformance checks included in v0.4.0:
 
 ## Security Checks Reference
 
-Initial security checks included in v0.4.0:
+Initial security checks included in v1.0.0:
 
 | ID | Name | What it validates | Severity on Fail |
 |----|------|------------------|-----------------|
@@ -537,7 +546,7 @@ Initial security checks included in v0.4.0:
 
 ## Behavioral Checks Reference
 
-Behavioral checks included in v0.4.0:
+Behavioral checks included in v1.0.0:
 
 | ID | Name | What it validates | Severity on Fail |
 |----|------|------------------|-----------------|

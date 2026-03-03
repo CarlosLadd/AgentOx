@@ -159,6 +159,10 @@ async fn test_json_report_is_valid_json_with_required_fields() {
     assert!(parsed.get("summary").is_some(), "missing 'summary'");
     assert!(parsed.get("results").is_some(), "missing 'results'");
     assert!(
+        parsed.get("schema_version").is_some(),
+        "missing 'schema_version'"
+    );
+    assert!(
         parsed.get("agentox_version").is_some(),
         "missing 'agentox_version'"
     );
@@ -235,7 +239,7 @@ async fn test_security_checks_run_with_security_category() {
 }
 
 #[tokio::test]
-async fn test_default_v0_4_runner_includes_all_categories() {
+async fn test_default_v1_runner_includes_all_categories() {
     let mut ctx = setup_ctx(&[]).await;
 
     let mut runner = CheckRunner::new();
@@ -248,13 +252,13 @@ async fn test_default_v0_4_runner_includes_all_categories() {
     let has_sec = results.iter().any(|r| r.check_id.starts_with("SEC-"));
 
     let has_bhv = results.iter().any(|r| r.check_id.starts_with("BHV-"));
-    assert!(has_conf, "Default v0.4 runner must include CONF-* checks");
-    assert!(has_sec, "Default v0.4 runner must include SEC-* checks");
-    assert!(has_bhv, "Default v0.4 runner must include BHV-* checks");
+    assert!(has_conf, "Default v1 runner must include CONF-* checks");
+    assert!(has_sec, "Default v1 runner must include SEC-* checks");
+    assert!(has_bhv, "Default v1 runner must include BHV-* checks");
 }
 
 #[tokio::test]
-async fn test_default_v0_4_json_report_has_expected_shape_and_counts() {
+async fn test_default_v1_json_report_has_expected_shape_and_counts() {
     let mut ctx = setup_ctx(&[]).await;
     let mut runner = CheckRunner::new();
     runner.register_default_v0_4_checks();
@@ -276,6 +280,29 @@ async fn test_default_v0_4_json_report_has_expected_shape_and_counts() {
     assert!(categories.contains("\"conformance\""));
     assert!(categories.contains("\"security\""));
     assert!(categories.contains("\"behavioral\""));
+}
+
+#[test]
+fn test_pre_v1_json_compatibility_maps_to_v1_schema() {
+    // Golden-style pre-v1 payload intentionally missing schema_version.
+    let old_payload = serde_json::json!({
+        "agentox_version": "0.4.0",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "target": "mock-server",
+        "results": [],
+        "summary": {
+            "total_checks": 0,
+            "passed": 0,
+            "failed": 0,
+            "by_severity": {},
+            "duration_ms": 1
+        }
+    });
+    let report: AuditReport =
+        serde_json::from_value(old_payload).expect("v0.4-shaped JSON should still deserialize");
+    assert_eq!(report.schema_version, "1.0");
+    assert_eq!(report.target, "mock-server");
+    assert_eq!(report.summary.total_checks, 0);
 }
 
 #[tokio::test]

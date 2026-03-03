@@ -8,6 +8,9 @@ use std::collections::BTreeMap;
 /// A complete audit report.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditReport {
+    /// Stable report schema version.
+    #[serde(default = "default_report_schema_version")]
+    pub schema_version: String,
     /// AgentOx version that produced this report.
     pub agentox_version: String,
     /// Timestamp of the audit run.
@@ -57,6 +60,7 @@ impl AuditReport {
         }
 
         Self {
+            schema_version: default_report_schema_version(),
             agentox_version: env!("CARGO_PKG_VERSION").to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
             target,
@@ -72,4 +76,8 @@ impl AuditReport {
             },
         }
     }
+}
+
+fn default_report_schema_version() -> String {
+    "1.0".to_string()
 }

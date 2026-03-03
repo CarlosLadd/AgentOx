@@ -257,3 +257,29 @@ fn test_stdio_and_target_together_fail() {
         "expected clear dual-target error, got: {stderr}"
     );
 }
+
+#[test]
+fn test_json_mode_keeps_stdout_machine_readable() {
+    let mock_bin = ensure_mock_server_binary();
+    let output = Command::new(env!("CARGO_BIN_EXE_agentox"))
+        .args([
+            "audit",
+            "--stdio",
+            &mock_bin,
+            "--format",
+            "json",
+            "--no-color",
+        ])
+        .output()
+        .expect("failed to run agentox in json mode");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("stdout must contain valid JSON report only");
+    assert!(parsed.get("schema_version").is_some());
+    assert!(
+        !stderr.is_empty(),
+        "stderr should contain run/progress summary"
+    );
+}

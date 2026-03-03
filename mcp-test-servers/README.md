@@ -43,7 +43,7 @@ agentox audit --stdio "./target/debug/mcp-test-server-rust" --only security
 
 ### Expected Results
 
-For AgentOx `v0.4`, expected baseline is **16/17**:
+For AgentOx `v1.0.0`, expected baseline is **16/17**:
 - `CONF-001..004`, `CONF-006..010` pass
 - `SEC-001..004` pass
 - `BHV-001..003` pass

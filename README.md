@@ -37,7 +37,7 @@ agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" --fo
 # Run only security checks
 agentox audit --stdio "npx -y @modelcontextprotocol/server-filesystem /tmp" --only security
 
-# Audit an HTTP/SSE endpoint (beta)
+# Audit an HTTP/SSE endpoint
 agentox audit --target "http://localhost:8080"
 ```
 
@@ -73,7 +73,7 @@ Summary
 
 ---
 
-## Conformance Checks (v0.4.0)
+## Conformance Checks (v1.0.0)
 
 | ID | Check | Severity on Fail |
 |----|-------|-----------------|
@@ -88,7 +88,7 @@ Summary
 | CONF-009 | Protocol version negotiation is handled correctly | HIGH |
 | CONF-010 | Initialization lifecycle is handled correctly | LOW |
 
-## Security Checks (v0.4.0)
+## Security Checks (v1.0.0)
 
 | ID | Check | Severity on Fail |
 |----|-------|-----------------|
@@ -97,7 +97,7 @@ Summary
 | SEC-003 | Error messages do not leak sensitive internals | MEDIUM |
 | SEC-004 | Bounded burst/large-input resilience | MEDIUM |
 
-## Behavioral Checks (v0.4.0)
+## Behavioral Checks (v1.0.0)
 
 | ID | Check | Severity on Fail |
 |----|-------|-----------------|
@@ -110,6 +110,15 @@ Summary
 ## CI/CD Integration
 
 AgentOx exits with code `1` when findings are detected and `0` when all checks pass — making it a natural fit for CI pipelines.
+
+## Stable Contracts (v1.0.0)
+
+The following interfaces are semver-stable starting in v1.0.0:
+- CLI command and flag behavior (`agentox audit`, `--stdio|--target`, `--format`, `--only`, `--timeout`, exit semantics)
+- JSON report contract emitted by `--format json` (includes `schema_version: "1.0"`)
+
+`agentox-core` internal Rust APIs are not yet semver-frozen.
+HTML report generation is intentionally out of scope for v1.0.0.
 
 ### GitHub Actions
 
@@ -145,8 +154,8 @@ agentox audit --stdio "npx my-mcp-server" || {
 | **v0.1** | Protocol Conformance (10 checks, stdio transport) | ✅ Done |
 | **v0.2** | Security Surface Analysis (initial `SEC-*` suite, stdio transport) | ✅ Done |
 | **v0.3** | HTTP/SSE transport + CI/CD packaging (GitHub Action, Docker image) | ✅ Done |
-| **v0.4** | Behavioral Contracts + HTTP/SSE beta transport | ✅ Done |
-| **v1.0** | Stable API, HTTP/SSE transport, HTML reports | 📋 Planned |
+| **v0.4** | Behavioral Contracts + HTTP/SSE transport | ✅ Done |
+| **v1.0** | Stable CLI/JSON API + HTTP/SSE transport GA (basic) | ✅ Done |
 
 ---
 

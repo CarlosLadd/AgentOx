@@ -9,6 +9,7 @@ pub struct HttpSseTransport {
     endpoint: String,
     client: reqwest::Client,
     timeout: Duration,
+    max_retries: usize,
 }
 
 impl HttpSseTransport {
@@ -26,11 +27,13 @@ impl HttpSseTransport {
             endpoint: endpoint.into(),
             client,
             timeout,
+            max_retries: 2,
         }
     }
 
-    async fn post_raw(&self, message: &str) -> Result<reqwest::Response, TransportError> {
-        self.client
+    async fn post_raw_once(&self, message: &str) -> Result<reqwest::Response, TransportError> {
+        let resp = self
+            .client
             .post(&self.endpoint)
             .header(CONTENT_TYPE, "application/json")
             .body(message.to_string())
@@ -40,22 +43,127 @@ impl HttpSseTransport {
                 if e.is_timeout() {
                     TransportError::Timeout(self.timeout)
                 } else {
-                    TransportError::Http(e.to_string())
+                    TransportError::Http(format!("transport request failed: {e}"))
                 }
-            })
+            })?;
+        Ok(resp)
     }
 
     fn parse_sse_first_data(body: &str) -> Option<String> {
+        let mut data_lines: Vec<String> = Vec::new();
         for line in body.lines() {
             let line = line.trim();
-            if let Some(data) = line.strip_prefix("data:") {
-                let payload = data.trim();
-                if !payload.is_empty() {
-                    return Some(payload.to_string());
+            if line.is_empty() {
+                if !data_lines.is_empty() {
+                    return Some(data_lines.join("\n"));
                 }
+                continue;
+            }
+            if line.starts_with(':') {
+                continue;
+            }
+            if let Some(data) = line.strip_prefix("data:") {
+                data_lines.push(data.trim().to_string());
             }
         }
-        None
+        if data_lines.is_empty() {
+            None
+        } else {
+            Some(data_lines.join("\n"))
+        }
+    }
+
+    fn is_retryable_status(status: reqwest::StatusCode) -> bool {
+        matches!(
+            status,
+            reqwest::StatusCode::BAD_GATEWAY
+                | reqwest::StatusCode::SERVICE_UNAVAILABLE
+                | reqwest::StatusCode::GATEWAY_TIMEOUT
+        )
+    }
+
+    fn maybe_retry_delay(attempt: usize) -> Duration {
+        Duration::from_millis(50 * (attempt as u64 + 1))
+    }
+
+    async fn execute_with_retry(
+        &self,
+        message: &str,
+        expect_response_body: bool,
+    ) -> Result<Option<String>, TransportError> {
+        let mut last_err: Option<TransportError> = None;
+
+        for attempt in 0..=self.max_retries {
+            let response = self.post_raw_once(message).await;
+            match response {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_client_error() {
+                        return Err(TransportError::Http(format!(
+                            "HTTP client error {}",
+                            status.as_u16()
+                        )));
+                    }
+                    if !status.is_success() {
+                        if Self::is_retryable_status(status) && attempt < self.max_retries {
+                            tokio::time::sleep(Self::maybe_retry_delay(attempt)).await;
+                            continue;
+                        }
+                        return Err(TransportError::Http(format!(
+                            "HTTP server error {}",
+                            status.as_u16()
+                        )));
+                    }
+
+                    if !expect_response_body {
+                        return Ok(None);
+                    }
+
+                    let content_type = resp
+                        .headers()
+                        .get(CONTENT_TYPE)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
+
+                    let body = resp
+                        .text()
+                        .await
+                        .map_err(|e| TransportError::Http(format!("response read failed: {e}")))?;
+                    if body.trim().is_empty() {
+                        return Ok(None);
+                    }
+
+                    let payload = if content_type.contains("text/event-stream") {
+                        Self::parse_sse_first_data(&body).ok_or_else(|| {
+                            TransportError::Http(
+                                "SSE response contained no data event payload".to_string(),
+                            )
+                        })?
+                    } else {
+                        body.trim().to_string()
+                    };
+
+                    serde_json::from_str::<serde_json::Value>(&payload).map_err(|e| {
+                        TransportError::Http(format!("response payload is not valid JSON: {e}"))
+                    })?;
+                    return Ok(Some(payload));
+                }
+                Err(e) => {
+                    let retryable = matches!(e, TransportError::Timeout(_))
+                        || matches!(&e, TransportError::Http(msg) if msg.contains("transport request failed"));
+                    last_err = Some(e);
+                    if retryable && attempt < self.max_retries {
+                        tokio::time::sleep(Self::maybe_retry_delay(attempt)).await;
+                        continue;
+                    }
+                }
+            }
+            break;
+        }
+
+        Err(last_err
+            .unwrap_or_else(|| TransportError::Http("request failed after retries".to_string())))
     }
 }
 
@@ -68,47 +176,13 @@ impl Transport for HttpSseTransport {
         }
     }
 
-    async fn write_raw(&mut self, _message: &str) -> Result<(), TransportError> {
-        let resp = self.post_raw(_message).await?;
-        if !resp.status().is_success() {
-            return Err(TransportError::Http(format!(
-                "HTTP status {} for notification",
-                resp.status()
-            )));
-        }
+    async fn write_raw(&mut self, message: &str) -> Result<(), TransportError> {
+        self.execute_with_retry(message, false).await?;
         Ok(())
     }
 
     async fn request_raw(&mut self, message: &str) -> Result<Option<String>, TransportError> {
-        let resp = self.post_raw(message).await?;
-        if !resp.status().is_success() {
-            return Err(TransportError::Http(format!(
-                "HTTP status {} for request",
-                resp.status()
-            )));
-        }
-
-        let content_type = resp
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| TransportError::Http(e.to_string()))?;
-        if body.trim().is_empty() {
-            return Ok(None);
-        }
-
-        if content_type.contains("text/event-stream") {
-            let payload = Self::parse_sse_first_data(&body).ok_or(TransportError::NoResponse)?;
-            return Ok(Some(payload));
-        }
-
-        Ok(Some(body.trim().to_string()))
+        self.execute_with_retry(message, true).await
     }
 
     async fn shutdown(&mut self) -> Result<(), TransportError> {
