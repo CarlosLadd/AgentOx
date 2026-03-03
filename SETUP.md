@@ -509,7 +509,7 @@ Some terminals or CI environments don't support ANSI colors. If colors look garb
 
 ## Conformance Checks Reference
 
-All 10 conformance checks included in v0.2.0:
+All 10 conformance checks included in v0.3.0:
 
 | ID | Name | What it validates | Severity on Fail |
 |----|------|------------------|-----------------|
@@ -526,7 +526,7 @@ All 10 conformance checks included in v0.2.0:
 
 ## Security Checks Reference
 
-Initial security checks included in v0.2.0:
+Initial security checks included in v0.3.0:
 
 | ID | Name | What it validates | Severity on Fail |
 |----|------|------------------|-----------------|

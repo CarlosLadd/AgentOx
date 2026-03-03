@@ -70,7 +70,7 @@ Summary
 
 ---
 
-## Conformance Checks (v0.2.0)
+## Conformance Checks (v0.3.0)
 
 | ID | Check | Severity on Fail |
 |----|-------|-----------------|
@@ -85,7 +85,7 @@ Summary
 | CONF-009 | Protocol version negotiation is handled correctly | HIGH |
 | CONF-010 | Initialization lifecycle is handled correctly | LOW |
 
-## Security Checks (v0.2.0)
+## Security Checks (v0.3.0)
 
 | ID | Check | Severity on Fail |
 |----|-------|-----------------|

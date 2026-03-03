@@ -14,7 +14,7 @@ name = "agentox"
 path = "src/main.rs"
 
 [dependencies]
-agentox-core = { path = "../agentox-core", version = "0.2.0" }
+agentox-core = { path = "../agentox-core", version = "0.3.0" }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tokio = { workspace = true }
